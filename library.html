@@ -1,0 +1,10 @@
+{{#if items}}
+{{#each items}}
+<div class="auto-wallpaper-library-item" title="{{name}} — {{description}}">
+    <img src="{{thumbnail}}" alt="{{name}}" loading="lazy" />
+    <div class="auto-wallpaper-library-name">{{name}}</div>
+</div>
+{{/each}}
+{{else}}
+<small>No cached wallpapers yet — chat to generate one.</small>
+{{/if}}

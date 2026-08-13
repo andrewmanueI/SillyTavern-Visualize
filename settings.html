@@ -1,0 +1,75 @@
+<div id="auto_wallpaper_settings">
+    <div class="inline-drawer">
+        <div class="inline-drawer-toggle inline-drawer-header">
+            <div class="flex-container alignitemscenter margin0">
+                <b>Auto-Wallpaper</b>
+            </div>
+            <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
+        </div>
+        <div class="inline-drawer-content">
+            <div class="marginBot10">
+                <small>Automatically sets a matching (cached, people-free) background wallpaper as the scene changes.</small>
+            </div>
+
+            <label class="checkbox_label" for="cr_wallpaper_enabled">
+                <input id="cr_wallpaper_enabled" type="checkbox" class="checkbox" {{#if wallpaperEnabled}}checked{{/if}} />
+                <span>Auto-wallpaper</span>
+            </label>
+
+            <label for="cr_messages_between">
+                <span>Messages between updates</span>
+                <small>(default 2 — one user + assistant exchange)</small>
+            </label>
+            <input id="cr_messages_between" class="text_pole" type="number" min="1" value="{{messagesBetweenUpdates}}" />
+
+            <label for="cr_image_key">
+                <span>OpenRouter API key</span>
+            </label>
+            <input id="cr_image_key" class="text_pole" type="password" value="{{imageKey}}" autocomplete="off" />
+
+            <label for="cr_image_model">
+                <span>Image model</span>
+                <small>(krea/krea-2-medium-turbo)</small>
+            </label>
+            <input id="cr_image_model" class="text_pole" type="text" value="{{imageModel}}" />
+
+            <label for="cr_aspect_ratio">
+                <span>Aspect ratio</span>
+                <small>(Krea: 1:1, 4:3, 3:2, 16:9, 4:5, 2:3, 9:16)</small>
+            </label>
+            <input id="cr_aspect_ratio" class="text_pole" type="text" value="{{aspectRatio}}" />
+
+            <label for="cr_crop_ratio">
+                <span>Crop ratio</span>
+                <small>(final portrait ratio, e.g. 1:4 like ST defaults)</small>
+            </label>
+            <input id="cr_crop_ratio" class="text_pole" type="text" value="{{cropRatio}}" />
+
+            <label for="cr_fit_mode">
+                <span>Background fit</span>
+                <small>(classic/cover/contain/stretch/center)</small>
+            </label>
+            <input id="cr_fit_mode" class="text_pole" type="text" value="{{fitMode}}" />
+
+            <label for="cr_text_model">
+                <span>Text model</span>
+                <small>(scene analysis + cache match)</small>
+            </label>
+            <input id="cr_text_model" class="text_pole" type="text" value="{{textModel}}" />
+
+            <div class="flex-container alignitemscenter spaceBetween marginTop10">
+                <b>Wallpaper library</b>
+            </div>
+            <div id="cr_library" class="auto-wallpaper-library marginTop5"></div>
+
+            <div class="flex-container justifyCenter marginTop10">
+                <div id="cr_update_now" class="menu_button" title="Analyze the current scene and update the wallpaper now.">
+                    <span>Update now</span>
+                </div>
+                <div id="cr_clear_cache" class="menu_button" title="Remove cached wallpapers so new scenes regenerate.">
+                    <span>Clear cache</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
