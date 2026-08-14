@@ -4,7 +4,7 @@ A [SillyTavern](https://github.com/SillyTavern/SillyTavern) third-party extensio
 
 Every N completed assistant replies (default 2 — counting starts only after the assistant finishes a reply) it:
 
-1. Sends only the latest exchange to a text model (default `google/gemma-4-26b-a4b-it`) in **one call**: the system prompt carries the full **wallpaper cache inventory**, so the model either picks an exact cached wallpaper to **reuse** or proposes a new people-free **setting description + clear name** to generate.
+1. Sends only the latest exchange to a text model (default `google/gemma-4-26b-a4b-it`) in **one call**, as a **structured message array** — a `developer` message with `<tags>`-delimited sections (cached-wallpaper inventory, output format, rules), the conversation as `user`/`assistant` turns, and a final task. The model either picks an exact cached wallpaper to **reuse** or proposes a new people-free **setting description + clear name** to generate.
 2. If the model chose a cached wallpaper, it applies it directly (no image generation cost).
 3. Otherwise it generates a new wallpaper with an OpenRouter image model (default `krea/krea-2-medium-turbo`) and sets it as the SillyTavern background.
 

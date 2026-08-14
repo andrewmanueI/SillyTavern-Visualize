@@ -2,11 +2,12 @@
 // current roleplay scene.
 //
 // Every N completed assistant replies (default 2) it sends the latest exchange to
-// the text model in a single call: the system prompt carries the full
-// cached-wallpaper inventory, so the model either picks a matching cached
-// wallpaper (reuse) or proposes a new people-free setting (generate). New
-// wallpapers are produced via an OpenRouter image model (default
-// krea/krea-2-medium-turbo).
+// the text model in a single call as a structured message array: a developer
+// message (with <tags>-delimited sections carrying the full cached-wallpaper
+// inventory, output format, and rules) + the conversation as user/assistant turns
+// + a final task. The model either picks a matching cached wallpaper (reuse) or
+// proposes a new people-free setting (generate). New wallpapers are produced via
+// an OpenRouter image model (default krea/krea-2-medium-turbo).
 //
 // Counting starts only after the assistant finishes a turn: the user's own send
 // doesn't advance the counter.
@@ -62,9 +63,68 @@ function getCache() {
     return Array.isArray(cache) ? cache : [];
 }
 
-function transcriptOf(ctx, messages) {
-    const who = (m) => (m.is_user ? (ctx.name1 || 'User') : (m.name || ctx.name2 || 'Assistant'));
-    return messages.map(m => `${who(m)}: ${String(m.mes).trim()}`).join('\n');
+/**
+ * Converts the recent chat messages into alternating user/assistant turns for the
+ * text model, merging any consecutive same-role messages so providers that reject
+ * repeated roles keep working.
+ */
+function toRoleTurns(messages) {
+    const turns = [];
+    for (const m of messages) {
+        const role = m.is_user ? 'user' : 'assistant';
+        const content = String(m.mes).trim();
+        if (!content) continue;
+        const last = turns[turns.length - 1];
+        if (last && last.role === role) {
+            last.content += '\n\n' + content;
+        } else {
+            turns.push({ role, content });
+        }
+    }
+    return turns;
+}
+
+/**
+ * Builds the structured message array for the single decide call:
+ *   - developer message carrying instructions, the cached-wallpaper inventory,
+ *     the output format, and rules — each delimited with <tags>
+ *   - the actual conversation as user/assistant turns
+ *   - a final user message with the task
+ */
+function buildDecideMessages(messages, cache) {
+    const inventory = cache.length
+        ? cache.map(e => `- name: ${e.name}\n  description: ${e.description}`).join('\n')
+        : '(the cache is empty — you must generate a new one)';
+
+    const developerContent = [
+        '<instructions>',
+        'You choose the correct background wallpaper for a roleplay scene.',
+        'Read the conversation below to understand the scene: location, time, weather, lighting, era, and objects.',
+        '</instructions>',
+        '',
+        '<cached_wallpapers>',
+        inventory,
+        '</cached_wallpapers>',
+        '',
+        '<output_format>',
+        'Respond with JSON only, using exactly one of these two shapes:',
+        '1) {"action":"reuse","name":"<exact name from <cached_wallpapers>, verbatim>"}',
+        '2) {"action":"generate","name":"<short kebab-case slug, 2-4 words>","description":"<1-2 sentences: location, time, weather, lighting, era, objects>"}',
+        '</output_format>',
+        '',
+        '<rules>',
+        '- Only reuse when a cached wallpaper matches the scene well; otherwise generate.',
+        '- For generate, describe ONLY the physical setting: never mention people, characters, names, pronouns, creatures, or actions.',
+        '- Never invent or modify a cached name — copy it verbatim from <cached_wallpapers>.',
+        '- Output raw JSON, no markdown fences, no commentary.',
+        '</rules>',
+    ].join('\n');
+
+    return [
+        { role: 'developer', content: developerContent },
+        ...toRoleTurns(messages),
+        { role: 'user', content: '<task>Choose a wallpaper for the scene in this conversation. Reply with the reuse or generate JSON exactly as specified in <output_format>.</task>' },
+    ];
 }
 
 async function chatCompletion(messages, settings, maxTokens = 200) {
@@ -99,37 +159,15 @@ function extractJson(raw) {
  * Single text-model call that decides what to do with the wallpaper:
  * either reuse a cached one (returning its exact name) or propose a brand-new
  * people-free setting to generate. The full cached-wallpaper inventory rides in
- * the system prompt, so the model has everything it needs in one shot.
+ * the developer message, so the model has everything it needs in one shot.
+ *
+ * `messages` are the recent ST chat message objects; they become the structured
+ * user/assistant turns of the request.
  *
  * Returns { mode: 'reuse', entry } or { mode: 'generate', setting }.
  */
-async function decideWallpaper(transcript, cache, settings) {
-    const inventory = cache.length
-        ? cache.map(e => `- name: ${e.name}\n  description: ${e.description}`).join('\n')
-        : '(the cache is empty — you must generate a new one)';
-
-    const raw = await chatCompletion([
-        {
-            role: 'system',
-            content: [
-                'You pick the right background wallpaper for a roleplay scene.',
-                '',
-                'CACHED WALLPAPER INVENTORY (reuse one only if it fits the scene well):',
-                inventory,
-                '',
-                'Respond with JSON only, using exactly one of these two shapes:',
-                '1) REUSE a cached wallpaper: {"action":"reuse","name":"<exact name from the inventory, verbatim>"}',
-                '2) GENERATE a new wallpaper: {"action":"generate","name":"<short kebab-case slug, 2-4 words>","description":"<1-2 sentences: location, time, weather, lighting, era, objects>"}',
-                '',
-                'Rules:',
-                '- Only reuse when a cached wallpaper matches the scene well; otherwise generate.',
-                '- For generate, describe ONLY the physical setting: never mention people, characters, names, pronouns, creatures, or actions.',
-                '- Never invent or modify a cached name — copy it verbatim from the inventory.',
-                '- Output raw JSON, no markdown fences, no commentary.',
-            ].join('\n'),
-        },
-        { role: 'user', content: `Scene:\n${transcript}` },
-    ], settings, 220);
+async function decideWallpaper(messages, cache, settings) {
+    const raw = await chatCompletion(buildDecideMessages(messages, cache), settings, 220);
 
     let parsed = null;
     try {
@@ -399,13 +437,12 @@ async function updateWallpaper() {
     if (!messages.length) return;
 
     const recent = messages.slice(-Math.max(2, settings.messagesBetweenUpdates));
-    const transcript = transcriptOf(ctx, recent);
 
     isUpdating = true;
     setLoading(true, 'Analyzing scene…');
     try {
         const cache = getCache();
-        const decision = await decideWallpaper(transcript, cache, settings);
+        const decision = await decideWallpaper(recent, cache, settings);
         if (decision.mode === 'reuse') {
             await applyBackground(decision.entry.filename);
             return;
