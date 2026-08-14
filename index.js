@@ -1,13 +1,15 @@
 // Auto-Wallpaper: automatically keeps the background wallpaper in sync with the
 // current roleplay scene.
 //
-// Every N messages (default 2) it sends the latest exchange to the text model in
-// a single call: the system prompt carries the full cached-wallpaper inventory,
-// so the model either picks a matching cached wallpaper (reuse) or proposes a new
-// people-free setting (generate). New wallpapers are produced via an OpenRouter
-// image model (default krea/krea-2-medium-turbo).
+// Every N completed assistant replies (default 2) it sends the latest exchange to
+// the text model in a single call: the system prompt carries the full
+// cached-wallpaper inventory, so the model either picks a matching cached
+// wallpaper (reuse) or proposes a new people-free setting (generate). New
+// wallpapers are produced via an OpenRouter image model (default
+// krea/krea-2-medium-turbo).
 //
-// Only the latest exchange is sent to the text model, keeping input/output low.
+// Counting starts only after the assistant finishes a turn: the user's own send
+// doesn't advance the counter.
 
 import { getContext, renderExtensionTemplateAsync } from '../../../extensions.js';
 import { saveSettingsDebounced, getThumbnailUrl } from '../../../../script.js';
@@ -424,6 +426,14 @@ async function updateWallpaper() {
 }
 
 function onMessageSent() {
+    // A turn is one *completed* assistant reply. The user's own message doesn't
+    // count — the update fires after the assistant finishes the exchange.
+    updateStatusUI();
+}
+
+function onMessageReceived(messageId, type) {
+    // Skip the character's greeting / first-message emissions.
+    if (type === 'first_message') return;
     const settings = getSettings();
     if (!settings.wallpaperEnabled) return;
     messageCount += 1;
@@ -432,12 +442,6 @@ function onMessageSent() {
         updateWallpaper();
     }
     updateStatusUI();
-}
-
-function onMessageReceived(messageId, type) {
-    // Skip the character's greeting / first-message emissions.
-    if (type === 'first_message') return;
-    onMessageSent();
 }
 
 /**
