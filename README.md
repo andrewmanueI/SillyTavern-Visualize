@@ -24,7 +24,7 @@ Generated wallpapers are **portrait (9:16)**, scene-only (no people/characters/t
 
 1. Make sure you have an API connection configured in SillyTavern (for chat replies).
 2. Open **Extensions → Auto-Wallpaper** settings and paste your **OpenRouter API key** (required — the extension calls OpenRouter's Image API directly for wallpapers).
-3. **Text provider** selector: **OpenRouter (direct)** uses the key above + the **Text model** field; **SillyTavern API (active connection)** uses whatever connection is active in ST's API Connections (no extra key needed). Optionally adjust: text model (scene analysis + cache match), image model, aspect ratio (`9:16`), crop ratio (used only for non-cover fit modes), background fit (`cover`), assistant replies between updates.
+3. Model selectors are populated from [OpenRouter's model API](https://openrouter.ai/docs/api-reference/list-available-models): **Text model provider** (the vendor, e.g. `google`), **Text model** (models from that vendor, default `google/gemma-4-26b-a4b-it`), and **Image model** (image-generation models **sorted by price low → high**). Optionally adjust: aspect ratio (`9:16`), crop ratio (used only for non-cover fit modes), background fit (`cover`), assistant replies between updates.
 
 That's it — chat normally and the background updates itself as the scene changes. You can also force an update with the **"Update now"** button, the wand-menu **"Auto Wallpaper"** button, or the **`/wallpaper`** slash command.
 

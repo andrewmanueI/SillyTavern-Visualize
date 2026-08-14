@@ -39,9 +39,11 @@
 
             <label for="cr_image_model">
                 <span>Image model</span>
-                <small>(krea/krea-2-medium-turbo)</small>
+                <small>(image-generation models, sorted by price low → high)</small>
             </label>
-            <input id="cr_image_model" class="text_pole" type="text" value="{{imageModel}}" />
+            <select id="cr_image_model" class="text_pole">
+                <option value="{{imageModel}}">{{imageModel}}</option>
+            </select>
 
             <label for="cr_aspect_ratio">
                 <span>Aspect ratio</span>
@@ -62,19 +64,20 @@
             <input id="cr_fit_mode" class="text_pole" type="text" value="{{fitMode}}" />
 
             <label for="cr_text_provider">
-                <span>Text provider</span>
-                <small>(which API analyzes the scene + matches the cache)</small>
+                <span>Text model provider</span>
+                <small>(OpenRouter model vendor — scene analysis + cache match)</small>
             </label>
             <select id="cr_text_provider" class="text_pole">
-                <option value="openrouter" {{#if textProviderOpenRouter}}selected{{/if}}>OpenRouter (direct, uses key below)</option>
-                <option value="st" {{#if textProviderSt}}selected{{/if}}>SillyTavern API (active connection)</option>
+                <option value="{{textVendor}}">{{textVendor}}</option>
             </select>
 
             <label for="cr_text_model">
                 <span>Text model</span>
-                <small>(OpenRouter model — scene analysis + cache match)</small>
+                <small>(models from the selected provider)</small>
             </label>
-            <input id="cr_text_model" class="text_pole" type="text" value="{{textModel}}" />
+            <select id="cr_text_model" class="text_pole">
+                <option value="{{textModel}}">{{textModel}}</option>
+            </select>
 
             <div class="flex-container alignitemscenter spaceBetween marginTop10">
                 <b>Wallpaper library</b>

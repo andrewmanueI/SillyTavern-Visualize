@@ -5,17 +5,17 @@
 // the text model in a single call as a structured message array: a developer
 // message (with <tags>-delimited sections carrying the full cached-wallpaper
 // inventory, output format, and rules) + the conversation as user/assistant turns
-// + a final task. The text call runs through the selected provider — either
-// OpenRouter directly (with the key from settings) or SillyTavern's active API
-// connection. The model either picks a matching cached wallpaper (reuse) or
-// proposes a new people-free setting (generate). New wallpapers are produced via
-// an OpenRouter image model (default krea/krea-2-medium-turbo).
+// + a final task. The model list is fetched from OpenRouter's /models API: text
+// model + provider (vendor) are dropdowns, and the image model dropdown lists
+// image-generation models sorted by price low -> high. The model either picks a
+// matching cached wallpaper (reuse) or proposes a new people-free setting
+// (generate). New wallpapers are produced via an OpenRouter image model.
 //
 // Counting starts only after the assistant finishes a turn: the user's own send
 // doesn't advance the counter.
 
 import { getContext, renderExtensionTemplateAsync } from '../../../extensions.js';
-import { saveSettingsDebounced, getThumbnailUrl, generateQuietPrompt } from '../../../../script.js';
+import { saveSettingsDebounced, getThumbnailUrl } from '../../../../script.js';
 import { background_settings } from '../../../backgrounds.js';
 import { SlashCommand } from '../../../slash-commands/SlashCommand.js';
 import { SlashCommandParser } from '../../../slash-commands/SlashCommandParser.js';
@@ -25,11 +25,11 @@ const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 
 const defaultSettings = Object.freeze({
     imageKey: '',
-    imageModel: 'krea/krea-2-medium-turbo',
+    imageModel: 'google/gemini-2.5-flash-image',
     aspectRatio: '9:16',
     cropRatio: '1:4',
     fitMode: 'cover',
-    textProvider: 'openrouter', // 'openrouter' (direct API) | 'st' (SillyTavern active connection)
+    textVendor: 'google',
     textModel: 'google/gemma-4-26b-a4b-it',
     wallpaperEnabled: true,
     messagesBetweenUpdates: 2,
@@ -58,12 +58,85 @@ function getSettings() {
         }
     }
     delete extensionSettings[MODULE_NAME].imageSize; // legacy key, replaced by aspectRatio
+    delete extensionSettings[MODULE_NAME].textProvider; // legacy transport selector (openrouter|st), replaced by textVendor
     return extensionSettings[MODULE_NAME];
 }
 
 function getCache() {
     const cache = getSettings().wallpaperCache;
     return Array.isArray(cache) ? cache : [];
+}
+
+// --- OpenRouter model catalog ---------------------------------------------------
+// Fetched once from GET /api/v1/models. Text models are grouped by vendor (the
+// first segment of the model id); image-generation models are the ones that emit
+// `image` output and are priced via `pricing.image_output` (per generated image),
+// sorted low -> high for the selector.
+
+let modelCatalog = null;
+
+function parseImagePrice(model) {
+    const raw = String(model.pricing?.image_output || '').trim();
+    const num = Number.parseFloat(raw);
+    return Number.isFinite(num) && num >= 0 ? num : NaN;
+}
+
+function formatImagePrice(price) {
+    if (!Number.isFinite(price)) return 'n/a';
+    if (price === 0) return 'free';
+    // Trim to a readable width without trailing zeros: e.g. 0.000008 -> "$0.000008/img"
+    let s;
+    if (price >= 1) {
+        s = price.toFixed(2).replace(/\.?0+$/, '');
+    } else if (price >= 0.001) {
+        s = price.toFixed(6).replace(/0+$/, '').replace(/\.$/, '');
+    } else {
+        // small prices need more digits; cap at 9 then trim trailing zeros
+        s = price.toFixed(9).replace(/0+$/, '').replace(/\.$/, '');
+    }
+    return `$${s}/img`;
+}
+
+async function fetchModelCatalog() {
+    if (modelCatalog) return modelCatalog;
+    const res = await fetch(`${OPENROUTER_BASE}/models`);
+    const data = await res.json();
+    const all = data?.data || [];
+    if (!res.ok || !all.length) throw new Error(data?.error?.message || `models API ${res.status}`);
+
+    const isText = (m) => (m.architecture?.output_modalities || []).includes('text');
+    const isImage = (m) => (m.architecture?.output_modalities || []).includes('image');
+    const isRouter = (m) => String(m.id).startsWith('openrouter/');
+
+    const textModels = all.filter(m => isText(m) && !isImage(m));
+    const vendors = [...new Set(textModels.map(m => m.id.split('/')[0]))].sort((a, b) => a.localeCompare(b));
+
+    const imageModels = all
+        .filter(m => isImage(m) && !isRouter(m))
+        .map(m => ({
+            id: m.id,
+            name: m.name,
+            price: parseImagePrice(m),
+        }))
+        .sort((a, b) => {
+            const pa = Number.isFinite(a.price) ? a.price : Infinity;
+            const pb = Number.isFinite(b.price) ? b.price : Infinity;
+            return pa - pb || a.id.localeCompare(b.id);
+        });
+
+    modelCatalog = { textModels, vendors, imageModels };
+    return modelCatalog;
+}
+
+function ensureModelOption(select, value) {
+    // If the saved model id isn't in the fetched list (e.g. removed model), append
+    // it as a manual option so the saved value is never silently lost.
+    if (value && ![...select.options].some(o => o.value === value)) {
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.textContent = `${value} (saved)`;
+        select.appendChild(opt);
+    }
 }
 
 /**
@@ -130,28 +203,8 @@ function buildDecideMessages(messages, cache) {
     ];
 }
 
-/**
- * Flattens the structured message array into a single tagged text prompt, for
- * providers that only accept a plain string (e.g. SillyTavern's quiet generation,
- * which wraps whatever API connection is active).
- */
-function flattenMessages(messages) {
-    return messages.map(m => `<${m.role}>\n${m.content}\n</${m.role}>`).join('\n\n');
-}
-
 async function chatCompletion(messages, settings, maxTokens = 200) {
-    // Route the text-model call through the selected provider.
-    if (settings.textProvider === 'st') {
-        const quietPrompt = flattenMessages(messages);
-        const quiet = await generateQuietPrompt({
-            quietPrompt,
-            quietToLoud: false,
-            responseLength: maxTokens,
-        });
-        return quiet?.trim() ?? '';
-    }
-
-    // OpenRouter direct REST call (default).
+    // OpenRouter direct REST call.
     const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -563,6 +616,45 @@ async function renderLibrary() {
     if (container.length) container.html(html);
 }
 
+async function fillVendorSelect() {
+    const catalog = await fetchModelCatalog();
+    const select = $('#cr_text_provider');
+    if (!select.length) return;
+    select.empty();
+    for (const vendor of catalog.vendors) {
+        select.append(`<option value="${vendor}">${vendor}</option>`);
+    }
+    select.val(getSettings().textVendor);
+}
+
+async function fillTextModelSelect(vendor) {
+    const catalog = await fetchModelCatalog();
+    const select = $('#cr_text_model');
+    if (!select.length) return;
+    const models = catalog.textModels.filter(m => m.id.startsWith(`${vendor}/`));
+    select.empty();
+    for (const m of models) {
+        // show vendor in label? no — vendor is obvious from the provider select.
+        select.append(`<option value="${m.id}">${m.id.replace(`${vendor}/`, '')}</option>`);
+    }
+    const current = getSettings().textModel;
+    ensureModelOption(select[0], current);
+    select.val(current);
+}
+
+async function fillImageModelSelect() {
+    const catalog = await fetchModelCatalog();
+    const select = $('#cr_image_model');
+    if (!select.length) return;
+    select.empty();
+    for (const m of catalog.imageModels) {
+        select.append(`<option value="${m.id}">${m.id} — ${formatImagePrice(m.price)}</option>`);
+    }
+    const current = getSettings().imageModel;
+    ensureModelOption(select[0], current);
+    select.val(current);
+}
+
 async function renderSettingsPanel() {
     const settings = getSettings();
     const html = await renderExtensionTemplateAsync('third-party/SillyTavern-AutoWallpaper', 'settings', {
@@ -571,9 +663,7 @@ async function renderSettingsPanel() {
         aspectRatio: settings.aspectRatio,
         cropRatio: settings.cropRatio,
         fitMode: settings.fitMode,
-        textProvider: settings.textProvider,
-        textProviderOpenRouter: settings.textProvider === 'openrouter',
-        textProviderSt: settings.textProvider === 'st',
+        textVendor: settings.textVendor,
         textModel: settings.textModel,
         wallpaperEnabled: settings.wallpaperEnabled,
         messagesBetweenUpdates: settings.messagesBetweenUpdates,
@@ -583,12 +673,22 @@ async function renderSettingsPanel() {
     updateStatusUI();
 
     $('#cr_image_key').on('input', () => { getSettings().imageKey = $('#cr_image_key').val(); saveSettingsDebounced(); });
-    $('#cr_image_model').on('input', () => { getSettings().imageModel = $('#cr_image_model').val(); saveSettingsDebounced(); });
     $('#cr_aspect_ratio').on('input', () => { getSettings().aspectRatio = $('#cr_aspect_ratio').val(); saveSettingsDebounced(); });
     $('#cr_crop_ratio').on('input', () => { getSettings().cropRatio = $('#cr_crop_ratio').val(); saveSettingsDebounced(); });
     $('#cr_fit_mode').on('input', () => { getSettings().fitMode = $('#cr_fit_mode').val(); saveSettingsDebounced(); });
-    $('#cr_text_provider').on('change', () => { getSettings().textProvider = $('#cr_text_provider').val(); saveSettingsDebounced(); });
-    $('#cr_text_model').on('input', () => { getSettings().textModel = $('#cr_text_model').val(); saveSettingsDebounced(); });
+    $('#cr_image_model').on('change', () => { getSettings().imageModel = $('#cr_image_model').val(); saveSettingsDebounced(); });
+    $('#cr_text_provider').on('change', function () {
+        getSettings().textVendor = $(this).val();
+        saveSettingsDebounced();
+        fillTextModelSelect($(this).val());
+        // keep the previously chosen model if it's from this vendor, else pick the first model
+        const current = getSettings().textModel;
+        if (!current.startsWith(`${$(this).val()}/`)) {
+            getSettings().textModel = $('#cr_text_model').val();
+            saveSettingsDebounced();
+        }
+    });
+    $('#cr_text_model').on('change', () => { getSettings().textModel = $('#cr_text_model').val(); saveSettingsDebounced(); });
     $('#cr_wallpaper_enabled').on('change', () => { getSettings().wallpaperEnabled = $('#cr_wallpaper_enabled').is(':checked'); saveSettingsDebounced(); });
     $('#cr_messages_between').on('input', () => {
         const value = parseInt($('#cr_messages_between').val(), 10);
@@ -602,6 +702,15 @@ async function renderSettingsPanel() {
         saveSettingsDebounced();
         renderLibrary();
     });
+
+    // Populate the model selects from OpenRouter's catalog (graceful if offline).
+    try {
+        await fillVendorSelect();
+        await fillTextModelSelect(getSettings().textVendor);
+        await fillImageModelSelect();
+    } catch (err) {
+        console.warn('[auto-wallpaper] could not load OpenRouter model catalog', err);
+    }
 
     await renderLibrary();
 }
