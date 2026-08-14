@@ -32,6 +32,9 @@ const defaultSettings = Object.freeze({
 let messageCount = 0;
 let isUpdating = false;
 
+const FADE_LAYER_ID = 'cr_bg_fade';
+const FADE_MS = 700;
+
 function getSettings() {
     const { extensionSettings } = getContext();
     // Migrate settings from the old 'chat_recap' key (folder was renamed to auto-wallpaper).
@@ -219,7 +222,70 @@ function setFitting(fitting) {
     background_settings.fitting = fitting;
 }
 
-function applyBackground(filename) {
+// --- Background crossfade -------------------------------------------------------
+// CSS cannot interpolate `background-image`, so a plain change of #bg1's image snaps
+// instantly. To crossfade we preload the new wallpaper, paint it on a clone layer
+// (#cr_bg_fade) that sits exactly over #bg1, fade the clone in over the old image,
+// then commit the change to #bg1 (the element ST persists) and clean up.
+
+function ensureFadeLayer() {
+    let layer = document.getElementById(FADE_LAYER_ID);
+    if (!layer) {
+        layer = document.createElement('div');
+        layer.id = FADE_LAYER_ID;
+        layer.setAttribute('aria-hidden', 'true');
+        $('#bg1').after(layer);
+    }
+    return layer;
+}
+
+function applyFittingToLayer(layer, fitMode) {
+    switch (fitMode) {
+        case 'contain':
+            layer.style.backgroundSize = 'contain';
+            break;
+        case 'stretch':
+            layer.style.backgroundSize = '100% 100%';
+            break;
+        case 'center':
+            layer.style.backgroundSize = 'auto';
+            break;
+        default: // cover / classic
+            layer.style.backgroundSize = 'cover';
+    }
+    layer.style.backgroundRepeat = 'no-repeat';
+    layer.style.backgroundPosition = 'center';
+}
+
+function preloadImage(filename) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve();
+        img.onerror = () => resolve(); // never block application on a preload failure
+        img.src = `backgrounds/${encodeURIComponent(filename)}`;
+    });
+}
+
+async function transitionTo(filename, url) {
+    await preloadImage(filename);
+
+    const layer = ensureFadeLayer();
+    applyFittingToLayer(layer, getSettings().fitMode);
+    layer.style.backgroundImage = url;
+    layer.style.opacity = '0';
+    void layer.offsetWidth; // force reflow so the opacity transition kicks in
+    layer.style.opacity = '1';
+
+    await new Promise(resolve => setTimeout(resolve, FADE_MS));
+
+    $('#bg1').css('background-image', url);
+    layer.style.opacity = '0';
+    setTimeout(() => {
+        layer.style.backgroundImage = '';
+    }, FADE_MS + 50);
+}
+
+async function applyBackground(filename) {
     const url = `url("backgrounds/${encodeURIComponent(filename)}")`;
     // ST persists/applies the background through `background_settings` (the object
     // saved under the top-level "background" key and reloaded by loadBackgroundSettings),
@@ -227,7 +293,7 @@ function applyBackground(filename) {
     setFitting(getSettings().fitMode);
     background_settings.name = filename;
     background_settings.url = url;
-    $('#bg1').css('background-image', url);
+    await transitionTo(filename, url);
     saveSettingsDebounced();
 }
 
@@ -286,7 +352,7 @@ async function generateWallpaper(setting, settings) {
     }
     const savedName = (await uploadRes.text()).trim();
 
-    applyBackground(savedName);
+    await applyBackground(savedName);
     return { name: setting.name, description: setting.description, filename: savedName };
 }
 
@@ -311,13 +377,15 @@ async function updateWallpaper() {
     const transcript = transcriptOf(ctx, recent);
 
     isUpdating = true;
+    setLoading(true, 'Analyzing scene…');
     try {
         const cache = getCache();
         const entry = await matchCachedWallpaper(transcript, cache, settings);
         if (entry) {
-            applyBackground(entry.filename);
+            await applyBackground(entry.filename);
             return;
         }
+        setLoading(true, 'Generating wallpaper…');
         const setting = await extractSetting(transcript, settings);
         const result = await generateWallpaper(setting, settings);
         if (!cache.some(e => e.name === result.name)) {
@@ -329,6 +397,7 @@ async function updateWallpaper() {
         console.error('[auto-wallpaper] failed', err);
     } finally {
         isUpdating = false;
+        setLoading(false);
     }
 }
 
@@ -340,12 +409,56 @@ function onMessageSent() {
         messageCount = 0;
         updateWallpaper();
     }
+    updateStatusUI();
 }
 
 function onMessageReceived(messageId, type) {
     // Skip the character's greeting / first-message emissions.
     if (type === 'first_message') return;
     onMessageSent();
+}
+
+/**
+ * Reflects the current "turns until next auto-update" counter and the
+ * auto-wallpaper on/off state in the settings panel and the wand-menu badge.
+ */
+function updateStatusUI() {
+    const settings = getSettings();
+    const enabled = settings.wallpaperEnabled;
+    const total = Math.max(1, settings.messagesBetweenUpdates);
+    const remaining = Math.max(0, total - messageCount);
+    const badge = $('#cr_recap_count');
+    const turns = $('#cr_turns_left');
+    if (badge.length) {
+        badge.text(enabled ? String(remaining) : '');
+        badge.toggleClass('cr-count-hidden', !enabled);
+    }
+    if (turns.length) turns.text(enabled ? String(remaining) : '—');
+}
+
+/**
+ * Shows/hides the in-panel loading indicator (spinner + stage text) and spins the
+ * wand-menu icon while a wallpaper update is in progress.
+ */
+function setLoading(active, text) {
+    const spinner = $('#cr_status_loading');
+    const turnsRow = $('#cr_status_turns');
+    const icon = $('#cr_recap .extensionsMenuExtensionButton');
+    if (active) {
+        if (spinner.length) {
+            spinner.css('display', '');
+            if (text && $('#cr_status_loading_text').length) {
+                $('#cr_status_loading_text').text(text);
+            }
+        }
+        if (turnsRow.length) turnsRow.css('display', 'none');
+        if (icon.length) icon.addClass('fa-spin');
+    } else {
+        if (spinner.length) spinner.css('display', 'none');
+        if (turnsRow.length) turnsRow.css('display', '');
+        if (icon.length) icon.removeClass('fa-spin');
+        updateStatusUI();
+    }
 }
 
 /**
@@ -374,8 +487,10 @@ async function renderSettingsPanel() {
         textModel: settings.textModel,
         wallpaperEnabled: settings.wallpaperEnabled,
         messagesBetweenUpdates: settings.messagesBetweenUpdates,
+        remainingTurns: Math.max(0, Math.max(1, settings.messagesBetweenUpdates) - messageCount),
     });
     $('#extensions_settings2').append(html);
+    updateStatusUI();
 
     $('#cr_image_key').on('input', () => { getSettings().imageKey = $('#cr_image_key').val(); saveSettingsDebounced(); });
     $('#cr_image_model').on('input', () => { getSettings().imageModel = $('#cr_image_model').val(); saveSettingsDebounced(); });
@@ -388,6 +503,7 @@ async function renderSettingsPanel() {
         const value = parseInt($('#cr_messages_between').val(), 10);
         getSettings().messagesBetweenUpdates = Number.isFinite(value) && value > 0 ? value : 2;
         saveSettingsDebounced();
+        updateStatusUI();
     });
     $('#cr_update_now').on('click', () => updateWallpaper());
     $('#cr_clear_cache').on('click', () => {
@@ -404,6 +520,7 @@ export function init() {
         <div id="cr_recap" class="list-group-item flex-container flexGap5">
             <div class="fa-solid fa-image extensionsMenuExtensionButton"></div>
             <span>Auto Wallpaper</span>
+            <span id="cr_recap_count" class="cr-count-badge"></span>
         </div>
     `;
     $('#extensionsMenu').append(buttonHtml);

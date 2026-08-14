@@ -31,3 +31,46 @@
     white-space: nowrap;
     padding: 2px 0;
 }
+
+/* Background crossfade layer: sits above #bg1 (same z-index, later in DOM order)
+   so the new wallpaper fades in over the old one, then is committed to #bg1. */
+#cr_bg_fade {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background-repeat: no-repeat;
+    background-position: center;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity var(--animation-duration-3x, 0.7s) ease-in-out;
+}
+
+/* Settings-panel status lines (loading spinner + turns remaining). */
+.cr-status-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    font-size: 0.9em;
+}
+
+.cr-status-line i {
+    color: var(--SmartThemeBodyColor);
+}
+
+/* Wand-menu turns-remaining badge. */
+.cr-count-badge {
+    margin-left: auto;
+    margin-right: 4px;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-size: 0.75em;
+    background-color: var(--black30a);
+    border: 1px solid var(--SmartThemeBorderColor);
+    color: var(--SmartThemeBodyColor);
+}
+
+.cr-count-badge.cr-count-hidden {
+    display: none;
+}

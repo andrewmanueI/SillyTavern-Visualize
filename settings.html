@@ -11,6 +11,16 @@
                 <small>Automatically sets a matching (cached, people-free) background wallpaper as the scene changes.</small>
             </div>
 
+            <div id="cr_status" class="marginBot10">
+                <div id="cr_status_loading" class="cr-status-line" style="display:none">
+                    <i class="fa-solid fa-spinner fa-spin"></i>
+                    <span id="cr_status_loading_text">Generating wallpaper…</span>
+                </div>
+                <div id="cr_status_turns" class="cr-status-line">
+                    <span>Turns until next update: <b id="cr_turns_left">{{remainingTurns}}</b></span>
+                </div>
+            </div>
+
             <label class="checkbox_label" for="cr_wallpaper_enabled">
                 <input id="cr_wallpaper_enabled" type="checkbox" class="checkbox" {{#if wallpaperEnabled}}checked{{/if}} />
                 <span>Auto-wallpaper</span>
