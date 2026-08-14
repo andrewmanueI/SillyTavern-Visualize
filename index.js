@@ -1,9 +1,10 @@
 // Auto-Wallpaper: automatically keeps the background wallpaper in sync with the
 // current roleplay scene.
 //
-// Every N messages (default 2) it analyzes the latest exchange with the text
-// model, extracts a people-free setting description + clear name, then either
-// reuses a matching cached wallpaper or generates a new one via an OpenRouter
+// Every N messages (default 2) it sends the latest exchange to the text model in
+// a single call: the system prompt carries the full cached-wallpaper inventory,
+// so the model either picks a matching cached wallpaper (reuse) or proposes a new
+// people-free setting (generate). New wallpapers are produced via an OpenRouter
 // image model (default krea/krea-2-medium-turbo).
 //
 // Only the latest exchange is sent to the text model, keeping input/output low.
@@ -92,52 +93,74 @@ function extractJson(raw) {
     return JSON.parse(s);
 }
 
-async function extractSetting(transcript, settings) {
+/**
+ * Single text-model call that decides what to do with the wallpaper:
+ * either reuse a cached one (returning its exact name) or propose a brand-new
+ * people-free setting to generate. The full cached-wallpaper inventory rides in
+ * the system prompt, so the model has everything it needs in one shot.
+ *
+ * Returns { mode: 'reuse', entry } or { mode: 'generate', setting }.
+ */
+async function decideWallpaper(transcript, cache, settings) {
+    const inventory = cache.length
+        ? cache.map(e => `- name: ${e.name}\n  description: ${e.description}`).join('\n')
+        : '(the cache is empty — you must generate a new one)';
+
     const raw = await chatCompletion([
         {
             role: 'system',
-            content: 'You describe the physical SETTING of a story scene only. Reply with JSON with exactly two keys: "name" (a short kebab-case slug, 2-4 words, describing the scene) and "description" (1-2 sentences: location, time, weather, lighting, era, objects). NEVER mention people, characters, names, pronouns, creatures, or actions.',
+            content: [
+                'You pick the right background wallpaper for a roleplay scene.',
+                '',
+                'CACHED WALLPAPER INVENTORY (reuse one only if it fits the scene well):',
+                inventory,
+                '',
+                'Respond with JSON only, using exactly one of these two shapes:',
+                '1) REUSE a cached wallpaper: {"action":"reuse","name":"<exact name from the inventory, verbatim>"}',
+                '2) GENERATE a new wallpaper: {"action":"generate","name":"<short kebab-case slug, 2-4 words>","description":"<1-2 sentences: location, time, weather, lighting, era, objects>"}',
+                '',
+                'Rules:',
+                '- Only reuse when a cached wallpaper matches the scene well; otherwise generate.',
+                '- For generate, describe ONLY the physical setting: never mention people, characters, names, pronouns, creatures, or actions.',
+                '- Never invent or modify a cached name — copy it verbatim from the inventory.',
+                '- Output raw JSON, no markdown fences, no commentary.',
+            ].join('\n'),
         },
-        { role: 'user', content: transcript },
+        { role: 'user', content: `Scene:\n${transcript}` },
     ], settings, 220);
 
+    let parsed = null;
     try {
-        const j = extractJson(raw);
-        const name = String(j.name || '')
+        parsed = extractJson(raw);
+    } catch { /* fall through to fallback */ }
+
+    // REUSE: model picked a cached name (possibly humanized — normalize it to the
+    // same kebab-slug shape the generate names use before matching).
+    const action = String(parsed?.action || '').toLowerCase();
+    if (action === 'reuse' && parsed?.name) {
+        const pick = String(parsed.name).trim().toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+        const entry = cache.find(e =>
+            e.name.toLowerCase() === pick
+            || pick.includes(e.name.toLowerCase())
+            || e.name.toLowerCase().includes(pick),
+        );
+        if (entry) return { mode: 'reuse', entry };
+    }
+
+    // GENERATE: explicit action, or any parseable object with a description.
+    const description = String(parsed?.description || '').trim();
+    if (description) {
+        const name = String(parsed?.name || '')
             .toLowerCase()
             .replace(/[^a-z0-9]+/g, '-')
             .replace(/^-+|-+$/g, '');
-        const description = String(j.description || '').trim();
-        if (name && description) return { name, description };
-    } catch { /* fall through to fallback */ }
+        if (name) return { mode: 'generate', setting: { name, description } };
+    }
 
-    return { name: `scene-${Date.now()}`, description: raw || 'A generic atmospheric scene.' };
-}
-
-async function matchCachedWallpaper(transcript, cache, settings) {
-    if (!cache.length) return null;
-
-    const list = cache.map(e => `- name: ${e.name} — ${e.description}`).join('\n');
-    const raw = await chatCompletion([
-        {
-            role: 'system',
-            content: 'You match a roleplay scene to cached background wallpapers. Output ONLY the exact name of the best-matching cached wallpaper, or exactly "NONE" if none match well. Use a cached name verbatim — never invent one.',
-        },
-        { role: 'user', content: `Scene:\n${transcript}\n\nCached wallpapers:\n${list}` },
-    ], settings, 40);
-
-    const pick = raw.trim().toLowerCase()
-        .replace(/^```[a-zA-Z]*\s*/, '')
-        .replace(/\s*```\s*$/, '')
-        .replace(/["'`]/g, '')
-        .trim();
-    if (!pick || pick === 'none' || pick.startsWith('none')) return null;
-
-    return cache.find(e =>
-        e.name.toLowerCase() === pick
-        || pick.includes(e.name.toLowerCase())
-        || e.name.toLowerCase().includes(pick),
-    ) || null;
+    // Fallback: unparseable response — generate a generic scene.
+    return { mode: 'generate', setting: { name: `scene-${Date.now()}`, description: raw || 'A generic atmospheric scene.' } };
 }
 
 function buildImagePrompt(settingDescription) {
@@ -380,14 +403,13 @@ async function updateWallpaper() {
     setLoading(true, 'Analyzing scene…');
     try {
         const cache = getCache();
-        const entry = await matchCachedWallpaper(transcript, cache, settings);
-        if (entry) {
-            await applyBackground(entry.filename);
+        const decision = await decideWallpaper(transcript, cache, settings);
+        if (decision.mode === 'reuse') {
+            await applyBackground(decision.entry.filename);
             return;
         }
         setLoading(true, 'Generating wallpaper…');
-        const setting = await extractSetting(transcript, settings);
-        const result = await generateWallpaper(setting, settings);
+        const result = await generateWallpaper(decision.setting, settings);
         if (!cache.some(e => e.name === result.name)) {
             cache.push(result);
             saveSettingsDebounced();

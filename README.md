@@ -4,9 +4,9 @@ A [SillyTavern](https://github.com/SillyTavern/SillyTavern) third-party extensio
 
 Every N messages (default 2 — one user + assistant exchange) it:
 
-1. Sends only the latest exchange to a text model (default `google/gemma-4-26b-a4b-it`), which extracts a **people-free setting description + clear name**.
-2. Checks the **wallpaper cache** — if a cached wallpaper already matches the scene, it reuses it (no image generation cost).
-3. Otherwise generates a new wallpaper with an OpenRouter image model (default `krea/krea-2-medium-turbo`) and sets it as the SillyTavern background.
+1. Sends only the latest exchange to a text model (default `google/gemma-4-26b-a4b-it`) in **one call**: the system prompt carries the full **wallpaper cache inventory**, so the model either picks an exact cached wallpaper to **reuse** or proposes a new people-free **setting description + clear name** to generate.
+2. If the model chose a cached wallpaper, it applies it directly (no image generation cost).
+3. Otherwise it generates a new wallpaper with an OpenRouter image model (default `krea/krea-2-medium-turbo`) and sets it as the SillyTavern background.
 
 Generated wallpapers are **portrait (9:16)**, scene-only (no people/characters/text), and shown with ST's `cover` background fit. Cached wallpapers appear as a scrollable thumbnail library in the settings panel.
 
@@ -24,7 +24,7 @@ Generated wallpapers are **portrait (9:16)**, scene-only (no people/characters/t
 
 1. Make sure you have an API connection configured in SillyTavern (for chat replies).
 2. Open **Extensions → Auto-Wallpaper** settings and paste your **OpenRouter API key** (required — the extension calls OpenRouter's Image API directly for wallpapers).
-3. Optionally adjust: text model (scene analysis), image model, aspect ratio (`9:16`), crop ratio (used only for non-cover fit modes), background fit (`cover`), messages between updates.
+3. Optionally adjust: text model (scene analysis + cache match), image model, aspect ratio (`9:16`), crop ratio (used only for non-cover fit modes), background fit (`cover`), messages between updates.
 
 That's it — chat normally and the background updates itself as the scene changes. You can also force an update with the **"Update now"** button, the wand-menu **"Auto Wallpaper"** button, or the **`/wallpaper`** slash command.
 
