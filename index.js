@@ -68,10 +68,10 @@ function getCache() {
 }
 
 // --- OpenRouter model catalog ---------------------------------------------------
-// Fetched once from GET /api/v1/models. We show EVERYTHING OpenRouter lists — no
-// modality filtering. The text selector groups models by vendor (the first
-// segment of the model id); the image selector lists every model too, with
-// image-generation models (priced via pricing.image_output) first, low -> high.
+// Fetched once from GET /api/v1/models. Text models are grouped by vendor (the
+// first segment of the model id). The image selector is FILTERED to genuine
+// image-generation models only (models that emit `image` output, excluding
+// OpenRouter's auto-routers), ordered purely by per-image price low -> high.
 
 let modelCatalog = null;
 
@@ -104,7 +104,7 @@ async function fetchModelCatalog() {
     const all = data?.data || [];
     if (!res.ok || !all.length) throw new Error(data?.error?.message || `models API ${res.status}`);
 
-    // Everything OpenRouter shows. (Ignore nothing — the user wants the full list.)
+    // Text selector: EVERYTHING OpenRouter lists, grouped by vendor.
     const models = all
         .map(m => ({
             id: m.id,
@@ -115,13 +115,24 @@ async function fetchModelCatalog() {
 
     const vendors = [...new Set(models.map(m => m.id.split('/')[0]))].sort((a, b) => a.localeCompare(b));
 
-    // Image selector: all models, image-generation (priced) first low -> high,
-    // unpriced models after.
-    const imageModels = [...models].sort((a, b) => {
-        const pa = Number.isFinite(a.imagePrice) ? a.imagePrice : Infinity;
-        const pb = Number.isFinite(b.imagePrice) ? b.imagePrice : Infinity;
-        return pa - pb || a.id.localeCompare(b.id);
-    });
+    // Image selector: FILTERED to genuine image-generation models only (models
+    // that emit `image` output, excluding OpenRouter's auto-routers). Ordered
+    // purely by per-image price low -> high (unpriced ones sort last).
+    const isImage = (m) => (m.architecture?.output_modalities || []).includes('image');
+    const isRouter = (m) => String(m.id).startsWith('openrouter/');
+
+    const imageModels = all
+        .filter(m => isImage(m) && !isRouter(m))
+        .map(m => ({
+            id: m.id,
+            name: m.name,
+            imagePrice: parseImagePrice(m),
+        }))
+        .sort((a, b) => {
+            const pa = Number.isFinite(a.imagePrice) ? a.imagePrice : Infinity;
+            const pb = Number.isFinite(b.imagePrice) ? b.imagePrice : Infinity;
+            return pa - pb || a.id.localeCompare(b.id);
+        });
 
     modelCatalog = { models, vendors, imageModels };
     return modelCatalog;
@@ -656,9 +667,16 @@ async function fillImageModelSelect() {
         const price = Number.isFinite(m.imagePrice) ? ` — ${formatImagePrice(m.imagePrice)}` : '';
         select.append(`<option value="${m.id}">${m.id}${price}</option>`);
     }
+    // No special-cased "(saved)" entries in the ordering: if the current model is
+    // in the filtered list keep it; otherwise select the cheapest and persist it.
     const current = getSettings().imageModel;
-    ensureModelOption(select[0], current);
-    select.val(current);
+    if (current && catalog.imageModels.some(m => m.id === current)) {
+        select.val(current);
+    } else {
+        select[0].selectedIndex = 0;
+        getSettings().imageModel = select.val();
+        saveSettingsDebounced();
+    }
 }
 
 /**
