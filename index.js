@@ -190,6 +190,7 @@ function buildDecideMessages(messages, cache) {
         '<rules>',
         '- Only reuse when a cached wallpaper matches the scene well; otherwise generate.',
         '- For generate, describe ONLY the physical setting: never mention people, characters, names, pronouns, creatures, or actions.',
+        '- For generate, write the description as a photorealistic photography prompt: state the medium explicitly (e.g. "cinematic photograph", "photorealistic still") and use concrete, named lighting and material terms (e.g. "golden hour side lighting", "wet black stone", "volumetric fog", "harsh fluorescent overhead") instead of vague adjectives like "beautiful" or "premium."',
         '- Never invent or modify a cached name — copy it verbatim from <cached_wallpapers>.',
         '- Output raw JSON, no markdown fences, no commentary.',
         '</rules>',
