@@ -61,9 +61,18 @@
             </label>
             <input id="cr_fit_mode" class="text_pole" type="text" value="{{fitMode}}" />
 
+            <label for="cr_text_provider">
+                <span>Text provider</span>
+                <small>(which API analyzes the scene + matches the cache)</small>
+            </label>
+            <select id="cr_text_provider" class="text_pole">
+                <option value="openrouter" {{#if textProviderOpenRouter}}selected{{/if}}>OpenRouter (direct, uses key below)</option>
+                <option value="st" {{#if textProviderSt}}selected{{/if}}>SillyTavern API (active connection)</option>
+            </select>
+
             <label for="cr_text_model">
                 <span>Text model</span>
-                <small>(scene analysis + cache match)</small>
+                <small>(OpenRouter model — scene analysis + cache match)</small>
             </label>
             <input id="cr_text_model" class="text_pole" type="text" value="{{textModel}}" />
 

@@ -5,7 +5,9 @@
 // the text model in a single call as a structured message array: a developer
 // message (with <tags>-delimited sections carrying the full cached-wallpaper
 // inventory, output format, and rules) + the conversation as user/assistant turns
-// + a final task. The model either picks a matching cached wallpaper (reuse) or
+// + a final task. The text call runs through the selected provider — either
+// OpenRouter directly (with the key from settings) or SillyTavern's active API
+// connection. The model either picks a matching cached wallpaper (reuse) or
 // proposes a new people-free setting (generate). New wallpapers are produced via
 // an OpenRouter image model (default krea/krea-2-medium-turbo).
 //
@@ -13,7 +15,7 @@
 // doesn't advance the counter.
 
 import { getContext, renderExtensionTemplateAsync } from '../../../extensions.js';
-import { saveSettingsDebounced, getThumbnailUrl } from '../../../../script.js';
+import { saveSettingsDebounced, getThumbnailUrl, generateQuietPrompt } from '../../../../script.js';
 import { background_settings } from '../../../backgrounds.js';
 import { SlashCommand } from '../../../slash-commands/SlashCommand.js';
 import { SlashCommandParser } from '../../../slash-commands/SlashCommandParser.js';
@@ -27,6 +29,7 @@ const defaultSettings = Object.freeze({
     aspectRatio: '9:16',
     cropRatio: '1:4',
     fitMode: 'cover',
+    textProvider: 'openrouter', // 'openrouter' (direct API) | 'st' (SillyTavern active connection)
     textModel: 'google/gemma-4-26b-a4b-it',
     wallpaperEnabled: true,
     messagesBetweenUpdates: 2,
@@ -127,7 +130,28 @@ function buildDecideMessages(messages, cache) {
     ];
 }
 
+/**
+ * Flattens the structured message array into a single tagged text prompt, for
+ * providers that only accept a plain string (e.g. SillyTavern's quiet generation,
+ * which wraps whatever API connection is active).
+ */
+function flattenMessages(messages) {
+    return messages.map(m => `<${m.role}>\n${m.content}\n</${m.role}>`).join('\n\n');
+}
+
 async function chatCompletion(messages, settings, maxTokens = 200) {
+    // Route the text-model call through the selected provider.
+    if (settings.textProvider === 'st') {
+        const quietPrompt = flattenMessages(messages);
+        const quiet = await generateQuietPrompt({
+            quietPrompt,
+            quietToLoud: false,
+            responseLength: maxTokens,
+        });
+        return quiet?.trim() ?? '';
+    }
+
+    // OpenRouter direct REST call (default).
     const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -547,6 +571,9 @@ async function renderSettingsPanel() {
         aspectRatio: settings.aspectRatio,
         cropRatio: settings.cropRatio,
         fitMode: settings.fitMode,
+        textProvider: settings.textProvider,
+        textProviderOpenRouter: settings.textProvider === 'openrouter',
+        textProviderSt: settings.textProvider === 'st',
         textModel: settings.textModel,
         wallpaperEnabled: settings.wallpaperEnabled,
         messagesBetweenUpdates: settings.messagesBetweenUpdates,
@@ -560,6 +587,7 @@ async function renderSettingsPanel() {
     $('#cr_aspect_ratio').on('input', () => { getSettings().aspectRatio = $('#cr_aspect_ratio').val(); saveSettingsDebounced(); });
     $('#cr_crop_ratio').on('input', () => { getSettings().cropRatio = $('#cr_crop_ratio').val(); saveSettingsDebounced(); });
     $('#cr_fit_mode').on('input', () => { getSettings().fitMode = $('#cr_fit_mode').val(); saveSettingsDebounced(); });
+    $('#cr_text_provider').on('change', () => { getSettings().textProvider = $('#cr_text_provider').val(); saveSettingsDebounced(); });
     $('#cr_text_model').on('input', () => { getSettings().textModel = $('#cr_text_model').val(); saveSettingsDebounced(); });
     $('#cr_wallpaper_enabled').on('change', () => { getSettings().wallpaperEnabled = $('#cr_wallpaper_enabled').is(':checked'); saveSettingsDebounced(); });
     $('#cr_messages_between').on('input', () => {
