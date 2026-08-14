@@ -108,7 +108,9 @@ async function fetchModelCatalog() {
     const isImage = (m) => (m.architecture?.output_modalities || []).includes('image');
     const isRouter = (m) => String(m.id).startsWith('openrouter/');
 
-    const textModels = all.filter(m => isText(m) && !isImage(m));
+    // Text-capable = any model that outputs text (includes multimodal image/audio
+    // models — they can all chat too). This keeps the list complete.
+    const textModels = all.filter(m => isText(m));
     const vendors = [...new Set(textModels.map(m => m.id.split('/')[0]))].sort((a, b) => a.localeCompare(b));
 
     const imageModels = all
@@ -634,12 +636,17 @@ async function fillTextModelSelect(vendor) {
     const models = catalog.textModels.filter(m => m.id.startsWith(`${vendor}/`));
     select.empty();
     for (const m of models) {
-        // show vendor in label? no — vendor is obvious from the provider select.
         select.append(`<option value="${m.id}">${m.id.replace(`${vendor}/`, '')}</option>`);
     }
     const current = getSettings().textModel;
-    ensureModelOption(select[0], current);
-    select.val(current);
+    // Only keep a saved out-of-catalog model when it actually belongs to this vendor.
+    if (current.startsWith(`${vendor}/`)) {
+        ensureModelOption(select[0], current);
+        select.val(current);
+    } else {
+        // Select the first model of the vendor (the change handler will persist it).
+        select[0].selectedIndex = 0;
+    }
 }
 
 async function fillImageModelSelect() {
@@ -677,13 +684,15 @@ async function renderSettingsPanel() {
     $('#cr_crop_ratio').on('input', () => { getSettings().cropRatio = $('#cr_crop_ratio').val(); saveSettingsDebounced(); });
     $('#cr_fit_mode').on('input', () => { getSettings().fitMode = $('#cr_fit_mode').val(); saveSettingsDebounced(); });
     $('#cr_image_model').on('change', () => { getSettings().imageModel = $('#cr_image_model').val(); saveSettingsDebounced(); });
-    $('#cr_text_provider').on('change', function () {
-        getSettings().textVendor = $(this).val();
+    $('#cr_text_provider').on('change', async function () {
+        const vendor = $(this).val();
+        getSettings().textVendor = vendor;
         saveSettingsDebounced();
-        fillTextModelSelect($(this).val());
-        // keep the previously chosen model if it's from this vendor, else pick the first model
+        await fillTextModelSelect(vendor);
+        // Keep the previously chosen model if it's from this vendor; otherwise adopt
+        // the first model in the new vendor's list.
         const current = getSettings().textModel;
-        if (!current.startsWith(`${$(this).val()}/`)) {
+        if (!current.startsWith(`${vendor}/`)) {
             getSettings().textModel = $('#cr_text_model').val();
             saveSettingsDebounced();
         }
