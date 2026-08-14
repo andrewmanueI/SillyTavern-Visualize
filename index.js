@@ -68,10 +68,10 @@ function getCache() {
 }
 
 // --- OpenRouter model catalog ---------------------------------------------------
-// Fetched once from GET /api/v1/models. Text models are grouped by vendor (the
-// first segment of the model id); image-generation models are the ones that emit
-// `image` output and are priced via `pricing.image_output` (per generated image),
-// sorted low -> high for the selector.
+// Fetched once from GET /api/v1/models. We show EVERYTHING OpenRouter lists — no
+// modality filtering. The text selector groups models by vendor (the first
+// segment of the model id); the image selector lists every model too, with
+// image-generation models (priced via pricing.image_output) first, low -> high.
 
 let modelCatalog = null;
 
@@ -104,29 +104,26 @@ async function fetchModelCatalog() {
     const all = data?.data || [];
     if (!res.ok || !all.length) throw new Error(data?.error?.message || `models API ${res.status}`);
 
-    const isText = (m) => (m.architecture?.output_modalities || []).includes('text');
-    const isImage = (m) => (m.architecture?.output_modalities || []).includes('image');
-    const isRouter = (m) => String(m.id).startsWith('openrouter/');
-
-    // Text-capable = any model that outputs text (includes multimodal image/audio
-    // models — they can all chat too). This keeps the list complete.
-    const textModels = all.filter(m => isText(m));
-    const vendors = [...new Set(textModels.map(m => m.id.split('/')[0]))].sort((a, b) => a.localeCompare(b));
-
-    const imageModels = all
-        .filter(m => isImage(m) && !isRouter(m))
+    // Everything OpenRouter shows. (Ignore nothing — the user wants the full list.)
+    const models = all
         .map(m => ({
             id: m.id,
             name: m.name,
-            price: parseImagePrice(m),
+            imagePrice: parseImagePrice(m),
         }))
-        .sort((a, b) => {
-            const pa = Number.isFinite(a.price) ? a.price : Infinity;
-            const pb = Number.isFinite(b.price) ? b.price : Infinity;
-            return pa - pb || a.id.localeCompare(b.id);
-        });
+        .sort((a, b) => a.id.localeCompare(b.id));
 
-    modelCatalog = { textModels, vendors, imageModels };
+    const vendors = [...new Set(models.map(m => m.id.split('/')[0]))].sort((a, b) => a.localeCompare(b));
+
+    // Image selector: all models, image-generation (priced) first low -> high,
+    // unpriced models after.
+    const imageModels = [...models].sort((a, b) => {
+        const pa = Number.isFinite(a.imagePrice) ? a.imagePrice : Infinity;
+        const pb = Number.isFinite(b.imagePrice) ? b.imagePrice : Infinity;
+        return pa - pb || a.id.localeCompare(b.id);
+    });
+
+    modelCatalog = { models, vendors, imageModels };
     return modelCatalog;
 }
 
@@ -633,10 +630,10 @@ async function fillTextModelSelect(vendor) {
     const catalog = await fetchModelCatalog();
     const select = $('#cr_text_model');
     if (!select.length) return;
-    const models = catalog.textModels.filter(m => m.id.startsWith(`${vendor}/`));
+    const models = catalog.models.filter(m => m.id.startsWith(`${vendor}/`));
     select.empty();
     for (const m of models) {
-        select.append(`<option value="${m.id}">${m.id.replace(`${vendor}/`, '')}</option>`);
+        select.append(`<option value="${m.id}">${m.id}</option>`);
     }
     const current = getSettings().textModel;
     // Only keep a saved out-of-catalog model when it actually belongs to this vendor.
@@ -655,11 +652,31 @@ async function fillImageModelSelect() {
     if (!select.length) return;
     select.empty();
     for (const m of catalog.imageModels) {
-        select.append(`<option value="${m.id}">${m.id} — ${formatImagePrice(m.price)}</option>`);
+        const price = Number.isFinite(m.imagePrice) ? ` — ${formatImagePrice(m.imagePrice)}` : '';
+        select.append(`<option value="${m.id}">${m.id}${price}</option>`);
     }
     const current = getSettings().imageModel;
     ensureModelOption(select[0], current);
     select.val(current);
+}
+
+/**
+ * Reflects the model-catalog load state in the settings panel:
+ * loading, loaded (with counts), or failed (with a retry link).
+ */
+function setModelStatus(state, detail) {
+    const el = $('#cr_model_status');
+    if (!el.length) return;
+    if (state === 'loading') {
+        el.html('<i class="fa-solid fa-spinner fa-spin"></i> Loading model list…');
+        el.removeClass('cr-model-error');
+    } else if (state === 'loaded') {
+        el.text(detail);
+        el.removeClass('cr-model-error');
+    } else {
+        el.html('<i class="fa-solid fa-triangle-exclamation"></i> Couldn\'t load models — <a href="#" id="cr_model_retry">retry</a>');
+        el.addClass('cr-model-error');
+    }
 }
 
 async function renderSettingsPanel() {
@@ -713,13 +730,25 @@ async function renderSettingsPanel() {
     });
 
     // Populate the model selects from OpenRouter's catalog (graceful if offline).
-    try {
-        await fillVendorSelect();
-        await fillTextModelSelect(getSettings().textVendor);
-        await fillImageModelSelect();
-    } catch (err) {
-        console.warn('[auto-wallpaper] could not load OpenRouter model catalog', err);
-    }
+    const populate = async () => {
+        setModelStatus('loading');
+        try {
+            const catalog = await fetchModelCatalog();
+            await fillVendorSelect();
+            await fillTextModelSelect(getSettings().textVendor);
+            await fillImageModelSelect();
+            setModelStatus('loaded', `${catalog.models.length} models from OpenRouter`);
+        } catch (err) {
+            console.warn('[auto-wallpaper] could not load OpenRouter model catalog', err);
+            setModelStatus('error');
+        }
+    };
+    await populate();
+    $('#cr_model_retry').on('click', (e) => {
+        e.preventDefault();
+        modelCatalog = null; // force refetch
+        populate();
+    });
 
     await renderLibrary();
 }

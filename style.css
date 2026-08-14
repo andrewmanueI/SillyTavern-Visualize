@@ -74,3 +74,24 @@
 .cr-count-badge.cr-count-hidden {
     display: none;
 }
+
+/* Model-catalog status line (loading / loaded / failed). */
+.cr-model-status {
+    font-size: 0.8em;
+    color: var(--SmartThemeBodyColor);
+    opacity: 0.75;
+}
+
+.cr-model-status i {
+    margin-right: 4px;
+}
+
+.cr-model-status.cr-model-error {
+    color: var(--SmartThemeErrorColor, #f66);
+    opacity: 1;
+}
+
+.cr-model-status.cr-model-error a {
+    color: inherit;
+    text-decoration: underline;
+}

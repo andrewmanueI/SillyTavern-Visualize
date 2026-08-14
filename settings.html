@@ -32,6 +32,10 @@
             </label>
             <input id="cr_messages_between" class="text_pole" type="number" min="1" value="{{messagesBetweenUpdates}}" />
 
+            <div class="flex-container alignitemscenter spaceBetween marginTop10">
+                <b>Image generation</b>
+            </div>
+
             <label for="cr_image_key">
                 <span>OpenRouter API key</span>
             </label>
@@ -39,15 +43,19 @@
 
             <label for="cr_image_model">
                 <span>Image model</span>
-                <small>(image-generation models, sorted by price low → high)</small>
+                <small>(all models — image-generation first, priced low → high)</small>
             </label>
             <select id="cr_image_model" class="text_pole">
                 <option value="{{imageModel}}">{{imageModel}}</option>
             </select>
 
+            <div id="cr_model_status" class="cr-model-status marginTop5">
+                <i class="fa-solid fa-spinner fa-spin"></i> Loading model list…
+            </div>
+
             <label for="cr_aspect_ratio">
                 <span>Aspect ratio</span>
-                <small>(Krea: 1:1, 4:3, 3:2, 16:9, 4:5, 2:3, 9:16)</small>
+                <small>(1:1, 4:3, 3:2, 16:9, 4:5, 2:3, 9:16)</small>
             </label>
             <input id="cr_aspect_ratio" class="text_pole" type="text" value="{{aspectRatio}}" />
 
@@ -63,9 +71,13 @@
             </label>
             <input id="cr_fit_mode" class="text_pole" type="text" value="{{fitMode}}" />
 
+            <div class="flex-container alignitemscenter spaceBetween marginTop10">
+                <b>Scene analysis (text)</b>
+            </div>
+
             <label for="cr_text_provider">
                 <span>Text model provider</span>
-                <small>(OpenRouter model vendor — scene analysis + cache match)</small>
+                <small>(OpenRouter vendor)</small>
             </label>
             <select id="cr_text_provider" class="text_pole">
                 <option value="{{textVendor}}">{{textVendor}}</option>
@@ -73,7 +85,7 @@
 
             <label for="cr_text_model">
                 <span>Text model</span>
-                <small>(models from the selected provider)</small>
+                <small>(all models from the selected provider)</small>
             </label>
             <select id="cr_text_model" class="text_pole">
                 <option value="{{textModel}}">{{textModel}}</option>
