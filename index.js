@@ -59,6 +59,21 @@ const TEXT_RETRY_DELAY_MS = 800;  // base delay, multiplied by attempt
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+/**
+ * Generates the per-install contributor id. crypto.randomUUID is only available
+ * in secure contexts (HTTPS or localhost) — on plain http://LAN-IP installs it
+ * is undefined, which would otherwise break activation. Always falls back.
+ */
+function generateContributorId() {
+    try {
+        if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+            return `viz-${crypto.randomUUID().replaceAll('-', '')}`;
+        }
+    } catch { /* fall through to fallback */ }
+    const rand = () => Math.random().toString(36).slice(2, 10);
+    return `viz-${rand()}${rand()}${Date.now().toString(36)}`;
+}
+
 function getSettings() {
     const { extensionSettings } = getContext();
     // Migrate settings from the old 'auto_wallpaper' and 'chat_recap' keys
@@ -84,7 +99,7 @@ function getSettings() {
     delete extensionSettings[MODULE_NAME].remoteApiKey; // legacy API-key auth, replaced by contributorId + public writes
     // Auto-generate the per-install contributor id on first use of remote storage.
     if (!extensionSettings[MODULE_NAME].contributorId) {
-        extensionSettings[MODULE_NAME].contributorId = `viz-${crypto.randomUUID().replaceAll('-', '')}`;
+        extensionSettings[MODULE_NAME].contributorId = generateContributorId();
     }
     return extensionSettings[MODULE_NAME];
 }
