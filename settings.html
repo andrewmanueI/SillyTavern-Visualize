@@ -202,6 +202,20 @@
                             <option value="{{textModel}}">{{textModel}}</option>
                         </select>
                     </div>
+
+                    <div class="aw-block">
+                        <label>
+                            Inference provider
+                            <span
+                                class="aw-info"
+                                data-tooltip="Which OpenRouter inference provider (endpoint) serves the scene-analysis model. Only providers actually available for the selected model are listed — they come straight from OpenRouter's per-model endpoints. 'Auto' lets OpenRouter load-balance by default."
+                                >ⓘ</span
+                            >
+                        </label>
+                        <select id="cr_inference_provider" class="text_pole">
+                            <option value="">Auto (OpenRouter default)</option>
+                        </select>
+                    </div>
                 </div>
             </details>
 

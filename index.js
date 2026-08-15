@@ -31,6 +31,7 @@ const defaultSettings = Object.freeze({
     fitMode: 'cover',
     textVendor: 'google',
     textModel: 'google/gemma-4-26b-a4b-it',
+    inferenceProvider: '', // OpenRouter inference provider tag ('' = OpenRouter default routing)
     wallpaperEnabled: true,
     messagesBetweenUpdates: 2,
     wallpaperCache: [],
@@ -163,6 +164,66 @@ function ensureModelOption(select, value) {
     }
 }
 
+// --- Inference providers (per model) --------------------------------------------
+// OpenRouter exposes the endpoints a model can be served from via
+// GET /api/v1/models/<model>/endpoints -> { data: { endpoints: [...] } }.
+// Each endpoint carries provider_name (display) and tag (the routing slug that
+// `provider.only` accepts). Only providers that actually exist for the selected
+// model are listed. Cached per model id.
+
+let providerCache = {}; // model id -> [{ tag, name }]
+
+async function fetchModelProviders(modelId) {
+    if (!modelId) return [];
+    if (providerCache[modelId]) return providerCache[modelId];
+
+    let providers = [];
+    try {
+        const res = await fetch(`${OPENROUTER_BASE}/models/${modelId}/endpoints`);
+        const data = await res.json();
+        const endpoints = data?.data?.endpoints || [];
+        const seen = new Set();
+        for (const ep of endpoints) {
+            if (ep?.tag && !seen.has(ep.tag)) {
+                seen.add(ep.tag);
+                const slash = ep.tag.indexOf('/');
+                const suffix = slash !== -1 ? ep.tag.slice(slash + 1) : '';
+                providers.push({
+                    tag: ep.tag,
+                    name: suffix ? `${ep.provider_name} (${suffix})` : (ep.provider_name || ep.tag),
+                });
+            }
+        }
+    } catch (err) {
+        console.warn('[auto-wallpaper] could not load inference providers', err?.message);
+    }
+    providers.sort((a, b) => a.name.localeCompare(b.name));
+    providerCache[modelId] = providers;
+    return providers;
+}
+
+async function fillInferenceProviderSelect(modelId) {
+    const select = $('#cr_inference_provider');
+    if (!select.length) return;
+    const providers = await fetchModelProviders(modelId);
+    select.empty();
+    select.append('<option value="">Auto (OpenRouter default)</option>');
+    for (const p of providers) {
+        select.append(`<option value="${p.tag}">${p.name}</option>`);
+    }
+    const current = getSettings().inferenceProvider;
+    if (current && providers.some(p => p.tag === current)) {
+        select.val(current);
+    } else {
+        // The saved provider isn't available for this model — reset to auto.
+        select.val('');
+        if (current) {
+            getSettings().inferenceProvider = '';
+            saveSettingsDebounced();
+        }
+    }
+}
+
 /**
  * Converts the recent chat messages into alternating user/assistant turns for the
  * text model, merging any consecutive same-role messages so providers that reject
@@ -240,13 +301,19 @@ async function chatCompletion(messages, settings, maxTokens = 200) {
             console.warn(`[auto-wallpaper] text API attempt ${attempt + 1}/${API_MAX_ATTEMPTS} after: ${lastError?.message}`);
         }
         try {
+            const body = { model: settings.textModel, messages, max_tokens: maxTokens };
+            // Pin inference to the user-chosen provider (only + no fallbacks) when
+            // one is selected; otherwise let OpenRouter load-balance by default.
+            if (settings.inferenceProvider) {
+                body.provider = { only: [settings.inferenceProvider], allow_fallbacks: false };
+            }
             const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${settings.imageKey}`,
                 },
-                body: JSON.stringify({ model: settings.textModel, messages, max_tokens: maxTokens }),
+                body: JSON.stringify(body),
             });
             const data = await res.json();
             if (!res.ok) {
@@ -810,8 +877,14 @@ async function renderSettingsPanel() {
             getSettings().textModel = $('#cr_text_model').val();
             saveSettingsDebounced();
         }
+        fillInferenceProviderSelect(getSettings().textModel);
     });
-    $('#cr_text_model').on('change', () => { getSettings().textModel = $('#cr_text_model').val(); saveSettingsDebounced(); });
+    $('#cr_text_model').on('change', function () {
+        getSettings().textModel = $(this).val();
+        saveSettingsDebounced();
+        fillInferenceProviderSelect($(this).val());
+    });
+    $('#cr_inference_provider').on('change', () => { getSettings().inferenceProvider = $('#cr_inference_provider').val(); saveSettingsDebounced(); });
     $('#cr_wallpaper_enabled').on('change', () => { getSettings().wallpaperEnabled = $('#cr_wallpaper_enabled').is(':checked'); saveSettingsDebounced(); });
     $('#cr_messages_between').on('input', () => {
         const value = parseInt($('#cr_messages_between').val(), 10);
@@ -835,6 +908,7 @@ async function renderSettingsPanel() {
             await fetchModelCatalog();
             await fillVendorSelect();
             await fillTextModelSelect(getSettings().textVendor);
+            await fillInferenceProviderSelect(getSettings().textModel);
             await fillImageModelSelect();
             setModelStatus('loaded');
         } catch (err) {
