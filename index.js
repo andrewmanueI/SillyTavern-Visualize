@@ -790,6 +790,7 @@ async function renderSettingsPanel() {
     // Restore select values that the template can't preselect (fit mode).
     $('#cr_fit_mode').val(getSettings().fitMode);
     updateStatusUI();
+    initTooltips();
 
     $('#cr_image_key').on('input', () => { getSettings().imageKey = $('#cr_image_key').val(); saveSettingsDebounced(); });
     $('#cr_aspect_ratio').on('input', () => { getSettings().aspectRatio = $('#cr_aspect_ratio').val(); saveSettingsDebounced(); });
@@ -908,6 +909,5 @@ export function init() {
     ctx.eventSource.on(ctx.eventTypes.MESSAGE_SENT, onMessageSent);
 
     renderSettingsPanel();
-    initTooltips();
     console.debug('[auto-wallpaper] extension initialized');
 }

@@ -175,11 +175,10 @@
     padding: 6px 0 6px 0;
 }
 
-/* Block labels wrap their controls (Smart-Memory pattern). */
+/* Block labels: title text + info icon flow inline on one line; the control
+   element below drops to its own full-width row. */
 #auto_wallpaper_settings .aw-block label {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
+    display: block;
 }
 
 #auto_wallpaper_settings .aw-block label.checkbox_label {
@@ -187,6 +186,13 @@
     flex-direction: row;
     align-items: center;
     gap: 6px;
+}
+
+#auto_wallpaper_settings .aw-block label:not(.checkbox_label) > input,
+#auto_wallpaper_settings .aw-block label:not(.checkbox_label) > select {
+    display: block;
+    width: 100%;
+    margin-top: 4px;
 }
 
 #auto_wallpaper_settings .aw-block .text_pole {
