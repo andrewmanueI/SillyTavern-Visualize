@@ -22,6 +22,9 @@ import { SlashCommandParser } from '../../../slash-commands/SlashCommandParser.j
 
 const MODULE_NAME = 'visualize';
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
+// Pinned embedding model for semantic library search — all vectors must come
+// from this exact model (changing it invalidates stored embeddings).
+const EMBED_MODEL = 'baai/bge-base-en-v1.5';
 
 const defaultSettings = Object.freeze({
     imageKey: '',
@@ -123,6 +126,67 @@ async function deleteRemoteWallpaper(settings, id) {
 }
 
 /**
+ * Computes a bge-base-en-v1.5 embedding for text via OpenRouter (768 dims).
+ * Returns null on failure so callers degrade gracefully.
+ */
+async function getEmbedding(text, settings) {
+    if (!text || !settings.imageKey) return null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) await sleep(800 * (attempt + 1));
+        try {
+            const res = await fetch(`${OPENROUTER_BASE}/embeddings`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${settings.imageKey}`,
+                },
+                body: JSON.stringify({ model: EMBED_MODEL, input: [String(text).slice(0, 500)] }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data?.error?.message || `embeddings API ${res.status}`);
+            const embedding = data?.data?.[0]?.embedding;
+            if (Array.isArray(embedding) && embedding.length) return embedding;
+            return null;
+        } catch (err) {
+            console.warn('[visualize] embedding failed', err?.message);
+        }
+    }
+    return null;
+}
+
+/**
+ * Semantic search of the shared library: embeds the query text (OpenRouter) and
+ * asks the worker to rank the stored wallpapers by cosine similarity. Returns
+ * cache-entry-shaped candidates (or [] on any failure).
+ */
+async function remoteSimilar(settings, text, limit = 10) {
+    if (!isRemoteMode(settings)) return [];
+    const embedding = await getEmbedding(text, settings);
+    if (!embedding) return [];
+    try {
+        const res = await remoteFetch(settings, '/api/wallpapers/similar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ embedding, limit }),
+        });
+        const data = await res.json();
+        return (data.results || []).map(w => ({
+            name: w.name,
+            description: w.description || '',
+            filename: '',
+            id: w.id,
+            own: w.contributorId === settings.contributorId,
+            url: w.urls.full,
+            thumb: w.urls.thumb,
+            score: w.score,
+        }));
+    } catch (err) {
+        console.warn('[visualize] remote similar search failed', err?.message);
+        return [];
+    }
+}
+
+/**
  * Re-encodes an image data URL as WebP (optionally downscaled to maxWidth),
  * returning a Blob. WebP is ~5-10x smaller than PNG for photographic scenes.
  */
@@ -139,6 +203,9 @@ async function encodeWebp(dataUrl, maxWidth = 0) {
 }
 
 async function uploadRemote(settings, fullBlob, thumbBlob, setting) {
+    // Embed the scene (name + description) so the wallpaper is findable via
+    // semantic search in the shared library. Failure to embed still uploads.
+    const embedding = await getEmbedding(`${setting.name}. ${setting.description}`.trim(), settings);
     const form = new FormData();
     form.append('image', new File([fullBlob], `visualize-${setting.name}.webp`, { type: 'image/webp' }));
     form.append('thumb', new File([thumbBlob], 'thumb.webp', { type: 'image/webp' }));
@@ -147,6 +214,7 @@ async function uploadRemote(settings, fullBlob, thumbBlob, setting) {
     form.append('fit', settings.fitMode);
     form.append('aspect', settings.aspectRatio);
     form.append('contributorId', settings.contributorId);
+    if (embedding) form.append('embedding', JSON.stringify(embedding));
     const res = await remoteFetch(settings, '/api/wallpapers', { method: 'POST', body: form });
     return res.json();
 }
@@ -805,7 +873,26 @@ async function updateWallpaper() {
     isUpdating = true;
     setLoading(true, 'Analyzing scene…');
     try {
-        const cache = getCache();
+        let cache = getCache();
+        // Remote mode: search the whole shared library semantically for the most
+        // similar wallpapers and use those as the reuse inventory (the library
+        // is far bigger than the local cache, so this is how crowd-sourcing pays
+        // off — most scenes resolve to an existing wallpaper, no generation).
+        if (isRemoteMode(settings)) {
+            const queryText = recent.map(m => String(m.mes).trim()).filter(Boolean).join(' ');
+            if (queryText) {
+                const similar = await remoteSimilar(settings, queryText, 10);
+                if (similar.length) {
+                    const merged = [];
+                    for (const s of similar) {
+                        if (!cache.some(e => e.url === s.url)) cache.push(s);
+                        merged.push(s);
+                    }
+                    saveSettingsDebounced();
+                    cache = merged;
+                }
+            }
+        }
         const decision = await decideWallpaper(recent, cache, settings);
         if (decision.mode === 'reuse') {
             await applyBackground(decision.entry);
