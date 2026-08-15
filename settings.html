@@ -219,6 +219,56 @@
                 </div>
             </details>
 
+            <!-- ══ STORAGE (R2) ══ -->
+            <details class="stv-section">
+                <summary>
+                    <i class="fa-solid fa-chevron-right stv-section-chevron"></i>
+                    Storage
+                    <span
+                        class="stv-info"
+                        data-tooltip="Store wallpapers in Cloudflare R2 via the Visualize storage worker (D1 index + dedup). Leave empty to keep wallpapers in SillyTavern's local backgrounds folder."
+                        >ⓘ</span
+                    >
+                </summary>
+                <div class="stv-section-content">
+                    <div class="stv-block">
+                        <label>
+                            Storage API URL
+                            <span
+                                class="stv-info"
+                                data-tooltip="The workers.dev URL of the visualize-storage worker, e.g. https://visualize-storage.andrewmanuelcool.workers.dev"
+                                >ⓘ</span
+                            >
+                        </label>
+                        <input
+                            id="stv_remote_url"
+                            class="text_pole"
+                            type="text"
+                            value="{{remoteApiUrl}}"
+                            placeholder="https://visualize-storage.andrewmanuelcool.workers.dev"
+                        />
+                    </div>
+                    <div class="stv-block">
+                        <label>
+                            Storage API key
+                            <span
+                                class="stv-info"
+                                data-tooltip="The X-API-Key for the storage worker. Set with `wrangler secret put API_KEY` and generated at deploy time."
+                                >ⓘ</span
+                            >
+                        </label>
+                        <input
+                            id="stv_remote_key"
+                            class="text_pole"
+                            type="password"
+                            value="{{remoteApiKey}}"
+                            autocomplete="off"
+                            placeholder="viz-..."
+                        />
+                    </div>
+                </div>
+            </details>
+
             <!-- ══ ACTIONS ══ -->
             <div class="stv-block stv-btn-row">
                 <div id="stv_update_now" class="menu_button" title="Analyze the current scene and update the wallpaper now.">

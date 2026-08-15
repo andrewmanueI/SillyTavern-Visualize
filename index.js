@@ -32,6 +32,8 @@ const defaultSettings = Object.freeze({
     textVendor: 'inclusionai',
     textModel: 'inclusionai/ling-2.6-flash',
     inferenceProvider: 'novita', // OpenRouter inference provider tag ('' = OpenRouter default routing)
+    remoteApiUrl: '', // R2 storage worker base URL ('' = store wallpapers locally in ST)
+    remoteApiKey: '', // R2 storage API key (X-API-Key)
     wallpaperEnabled: true,
     messagesBetweenUpdates: 2,
     wallpaperCache: [],
@@ -81,6 +83,73 @@ function getSettings() {
 function getCache() {
     const cache = getSettings().wallpaperCache;
     return Array.isArray(cache) ? cache : [];
+}
+
+// --- Remote storage (R2 worker) --------------------------------------------------
+// When remoteApiUrl + remoteApiKey are set, wallpapers are stored in the
+// r2-st-visualize bucket via the worker API: full WebP + thumbnail per wallpaper,
+// deduped by content hash, indexed in D1. Otherwise the old local ST background
+// storage is used. Cache entries carry { filename } locally or { url, thumb }
+// remotely.
+
+function isRemoteMode(settings) {
+    return !!(settings.remoteApiUrl && settings.remoteApiKey);
+}
+
+async function remoteFetch(settings, path, options = {}) {
+    const base = String(settings.remoteApiUrl).replace(/\/+$/, '');
+    const headers = { 'X-API-Key': settings.remoteApiKey, ...(options.headers || {}) };
+    const res = await fetch(`${base}${path}`, { ...options, headers });
+    if (!res.ok) {
+        throw new Error(`storage API ${res.status} ${res.statusText}`.trim());
+    }
+    return res;
+}
+
+/**
+ * Re-encodes an image data URL as WebP (optionally downscaled to maxWidth),
+ * returning a Blob. WebP is ~5-10x smaller than PNG for photographic scenes.
+ */
+async function encodeWebp(dataUrl, maxWidth = 0) {
+    const img = await loadImage(dataUrl);
+    const scale = maxWidth > 0 && img.naturalWidth > maxWidth ? maxWidth / img.naturalWidth : 1;
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+    const webpDataUrl = canvas.toDataURL('image/webp', 0.85);
+    const mediaType = (webpDataUrl.match(/data:([^;]+)/) || [])[1] || 'image/webp';
+    return base64ToBlob(webpDataUrl.split(',')[1], mediaType);
+}
+
+async function uploadRemote(settings, fullBlob, thumbBlob, setting) {
+    const form = new FormData();
+    form.append('image', new File([fullBlob], `visualize-${setting.name}.webp`, { type: 'image/webp' }));
+    form.append('thumb', new File([thumbBlob], 'thumb.webp', { type: 'image/webp' }));
+    form.append('name', setting.name);
+    form.append('description', setting.description);
+    form.append('fit', settings.fitMode);
+    form.append('aspect', settings.aspectRatio);
+    const res = await remoteFetch(settings, '/api/wallpapers', { method: 'POST', body: form });
+    return res.json();
+}
+
+/** Pulls wallpapers uploaded from anywhere (other devices) into the local cache. */
+async function syncRemoteCache(settings) {
+    if (!isRemoteMode(settings)) return;
+    try {
+        const data = await (await remoteFetch(settings, '/api/wallpapers?limit=500')).json();
+        const cache = getCache();
+        const seen = new Set(cache.map(e => e.url));
+        for (const w of data.wallpapers || []) {
+            if (w?.urls?.full && !seen.has(w.urls.full)) {
+                cache.push({ name: w.name, description: w.description || '', filename: '', url: w.urls.full, thumb: w.urls.thumb });
+            }
+        }
+        saveSettingsDebounced();
+    } catch (err) {
+        console.warn('[visualize] remote cache sync failed', err?.message);
+    }
 }
 
 // --- OpenRouter model catalog ---------------------------------------------------
@@ -553,17 +622,17 @@ function applyFittingToLayer(layer, fitMode) {
     layer.style.backgroundPosition = 'center';
 }
 
-function preloadImage(filename) {
+function preloadImage(src) {
     return new Promise((resolve) => {
         const img = new Image();
         img.onload = () => resolve();
         img.onerror = () => resolve(); // never block application on a preload failure
-        img.src = `backgrounds/${encodeURIComponent(filename)}`;
+        img.src = src;
     });
 }
 
-async function transitionTo(filename, url) {
-    await preloadImage(filename);
+async function transitionTo(preloadSrc, url) {
+    await preloadImage(preloadSrc);
 
     const layer = ensureFadeLayer();
     applyFittingToLayer(layer, getSettings().fitMode);
@@ -581,15 +650,29 @@ async function transitionTo(filename, url) {
     }, FADE_MS + 50);
 }
 
-async function applyBackground(filename) {
-    const url = `url("backgrounds/${encodeURIComponent(filename)}")`;
+/**
+ * Applies a wallpaper to the background with a crossfade. `entry` is a cache
+ * entry: { filename } for local ST backgrounds, or { url, thumb } for wallpapers
+ * served from the R2 storage worker.
+ */
+async function applyBackground(entry) {
+    const settings = getSettings();
+    let preloadSrc;
+    let url;
+    if (entry?.url) {
+        preloadSrc = entry.url;
+        url = `url("${entry.url}")`;
+    } else {
+        preloadSrc = `backgrounds/${encodeURIComponent(entry.filename)}`;
+        url = `url("${preloadSrc}")`;
+    }
     // ST persists/applies the background through `background_settings` (the object
     // saved under the top-level "background" key and reloaded by loadBackgroundSettings),
     // so mutate it directly — writing to power_user.background is not read back.
-    setFitting(getSettings().fitMode);
-    background_settings.name = filename;
+    setFitting(settings.fitMode);
+    background_settings.name = entry?.url ? `visualize:${entry.name}` : entry.filename;
     background_settings.url = url;
-    await transitionTo(filename, url);
+    await transitionTo(preloadSrc, url);
     saveSettingsDebounced();
 }
 
@@ -631,6 +714,25 @@ async function generateWallpaper(setting, settings) {
         croppedDataUrl = await cropToRatio(sourceDataUrl, wRatio, hRatio);
     }
     const blob = dataURLToBlob(croppedDataUrl);
+
+    // Remote storage (R2): re-encode as WebP (full + 256px thumbnail) and upload
+    // to the worker; the returned URLs are what the background/library use.
+    if (isRemoteMode(settings)) {
+        const fullBlob = await encodeWebp(croppedDataUrl, 0);
+        const thumbBlob = await encodeWebp(croppedDataUrl, 256);
+        const record = await uploadRemote(settings, fullBlob, thumbBlob, setting);
+        const entry = {
+            name: setting.name,
+            description: setting.description,
+            filename: '',
+            url: record.urls.full,
+            thumb: record.urls.thumb,
+        };
+        await applyBackground(entry);
+        return entry;
+    }
+
+    // Local storage: upload to ST's backgrounds folder.
     const filename = `visualize-${setting.name}.${extensionForMediaType(mediaType)}`;
 
     const formData = new FormData();
@@ -648,8 +750,9 @@ async function generateWallpaper(setting, settings) {
     }
     const savedName = (await uploadRes.text()).trim();
 
-    await applyBackground(savedName);
-    return { name: setting.name, description: setting.description, filename: savedName };
+    const entry = { name: setting.name, description: setting.description, filename: savedName };
+    await applyBackground(entry);
+    return entry;
 }
 
 /**
@@ -677,7 +780,7 @@ async function updateWallpaper() {
         const cache = getCache();
         const decision = await decideWallpaper(recent, cache, settings);
         if (decision.mode === 'reuse') {
-            await applyBackground(decision.entry.filename);
+            await applyBackground(decision.entry);
             return;
         }
         setLoading(true, 'Generating wallpaper…');
@@ -759,13 +862,14 @@ function setLoading(active, text) {
 
 /**
  * Renders the cached wallpaper library (thumbnails + tags) into the settings panel.
+ * Remote wallpapers use their worker thumbnail URL; local ones use ST's thumbnail.
  */
 async function renderLibrary() {
     const cache = getCache();
     const items = cache.map(e => ({
         name: e.name,
         description: e.description || '',
-        thumbnail: getThumbnailUrl('bg', e.filename),
+        thumbnail: e.thumb || getThumbnailUrl('bg', e.filename),
     }));
     const html = await renderExtensionTemplateAsync('third-party/SillyTavern-Visualize', 'library', { items });
     const container = $('#stv_library');
@@ -854,6 +958,8 @@ async function renderSettingsPanel() {
         fitMode: settings.fitMode,
         textVendor: settings.textVendor,
         textModel: settings.textModel,
+        remoteApiUrl: settings.remoteApiUrl,
+        remoteApiKey: settings.remoteApiKey,
         wallpaperEnabled: settings.wallpaperEnabled,
         messagesBetweenUpdates: settings.messagesBetweenUpdates,
         remainingTurns: Math.max(0, Math.max(1, settings.messagesBetweenUpdates) - messageCount),
@@ -890,6 +996,8 @@ async function renderSettingsPanel() {
         fillInferenceProviderSelect($(this).val());
     });
     $('#stv_inference_provider').on('change', () => { getSettings().inferenceProvider = $('#stv_inference_provider').val(); saveSettingsDebounced(); });
+    $('#stv_remote_url').on('input', () => { getSettings().remoteApiUrl = $('#stv_remote_url').val(); saveSettingsDebounced(); });
+    $('#stv_remote_key').on('input', () => { getSettings().remoteApiKey = $('#stv_remote_key').val(); saveSettingsDebounced(); });
     $('#stv_wallpaper_enabled').on('change', () => { getSettings().wallpaperEnabled = $('#stv_wallpaper_enabled').is(':checked'); saveSettingsDebounced(); });
     $('#stv_messages_between').on('input', () => {
         const value = parseInt($('#stv_messages_between').val(), 10);
@@ -928,6 +1036,8 @@ async function renderSettingsPanel() {
         populate();
     });
 
+    // Pull any wallpapers stored in R2 (from any device) into the library cache.
+    await syncRemoteCache(getSettings());
     await renderLibrary();
 }
 
