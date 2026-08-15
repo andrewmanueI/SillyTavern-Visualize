@@ -42,6 +42,16 @@ let isUpdating = false;
 const FADE_LAYER_ID = 'cr_bg_fade';
 const FADE_MS = 700;
 
+// Retry policy for the text-model call. Small MoE models (e.g. ling-2.6-flash)
+// intermittently return upstream 5xx errors, empty completions, or non-JSON text,
+// so we loop with backoff until we get a valid, decidable response.
+const API_MAX_ATTEMPTS = 3;       // transient HTTP failures (429 / 5xx / network)
+const API_RETRY_DELAY_MS = 1000;  // base delay, multiplied by attempt
+const TEXT_MAX_ATTEMPTS = 3;      // invalid / empty / undecidable responses
+const TEXT_RETRY_DELAY_MS = 800;  // base delay, multiplied by attempt
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 function getSettings() {
     const { extensionSettings } = getContext();
     // Migrate settings from the old 'chat_recap' key (folder was renamed to auto-wallpaper).
@@ -218,21 +228,41 @@ function buildDecideMessages(messages, cache) {
     ];
 }
 
+function isRetryableStatus(status) {
+    return status === 408 || status === 429 || status >= 500;
+}
+
 async function chatCompletion(messages, settings, maxTokens = 200) {
-    // OpenRouter direct REST call.
-    const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${settings.imageKey}`,
-        },
-        body: JSON.stringify({ model: settings.textModel, messages, max_tokens: maxTokens }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-        throw new Error(data?.error?.message || `text API ${res.status}`);
+    let lastError = null;
+    for (let attempt = 0; attempt < API_MAX_ATTEMPTS; attempt++) {
+        if (attempt > 0) {
+            await sleep(API_RETRY_DELAY_MS * attempt);
+            console.warn(`[auto-wallpaper] text API attempt ${attempt + 1}/${API_MAX_ATTEMPTS} after: ${lastError?.message}`);
+        }
+        try {
+            const res = await fetch(`${OPENROUTER_BASE}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${settings.imageKey}`,
+                },
+                body: JSON.stringify({ model: settings.textModel, messages, max_tokens: maxTokens }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                lastError = new Error(data?.error?.message || `text API ${res.status}`);
+                // Non-transient (e.g. 401 bad key) — retrying won't help.
+                if (!isRetryableStatus(res.status)) throw lastError;
+                continue;
+            }
+            return data.choices?.[0]?.message?.content?.trim() ?? '';
+        } catch (err) {
+            // Network-level failure — retry while attempts remain, else rethrow.
+            lastError = err;
+            if (attempt === API_MAX_ATTEMPTS - 1) throw err;
+        }
     }
-    return data.choices?.[0]?.message?.content?.trim() ?? '';
+    throw lastError ?? new Error('text API failed');
 }
 
 function extractJson(raw) {
@@ -253,46 +283,85 @@ function extractJson(raw) {
  * people-free setting to generate. The full cached-wallpaper inventory rides in
  * the developer message, so the model has everything it needs in one shot.
  *
+ * Loops with backoff until the model returns a VALID, decidable response:
+ *   - empty output -> retry
+ *   - unparseable / non-JSON -> retry
+ *   - "reuse" naming a wallpaper that isn't in the cache -> retry (hallucinated)
+ *   - anything that isn't a valid reuse or generate shape -> retry
+ * After TEXT_MAX_ATTEMPTS it falls back to a generic scene (never hard-fails).
+ *
  * `messages` are the recent ST chat message objects; they become the structured
  * user/assistant turns of the request.
  *
  * Returns { mode: 'reuse', entry } or { mode: 'generate', setting }.
  */
 async function decideWallpaper(messages, cache, settings) {
-    const raw = await chatCompletion(buildDecideMessages(messages, cache), settings, 220);
+    const requestMessages = buildDecideMessages(messages, cache);
 
-    let parsed = null;
-    try {
-        parsed = extractJson(raw);
-    } catch { /* fall through to fallback */ }
+    for (let attempt = 0; attempt < TEXT_MAX_ATTEMPTS; attempt++) {
+        if (attempt > 0) {
+            await sleep(TEXT_RETRY_DELAY_MS * attempt);
+            console.warn(`[auto-wallpaper] invalid text response, retrying ${attempt + 1}/${TEXT_MAX_ATTEMPTS}`);
+            setLoading(true, `Analyzing scene… (retry ${attempt + 1}/${TEXT_MAX_ATTEMPTS})`);
+        }
 
-    // REUSE: model picked a cached name (possibly humanized — normalize it to the
-    // same kebab-slug shape the generate names use before matching).
-    const action = String(parsed?.action || '').toLowerCase();
-    if (action === 'reuse' && parsed?.name) {
-        const pick = String(parsed.name).trim().toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-+|-+$/g, '');
-        const entry = cache.find(e =>
-            e.name.toLowerCase() === pick
-            || pick.includes(e.name.toLowerCase())
-            || e.name.toLowerCase().includes(pick),
-        );
-        if (entry) return { mode: 'reuse', entry };
+        let raw = '';
+        try {
+            raw = await chatCompletion(requestMessages, settings, 220);
+        } catch (err) {
+            // chatCompletion already retried transient failures; retry the whole
+            // attempt while we have attempts left, otherwise propagate.
+            console.warn('[auto-wallpaper] text call failed', err?.message);
+            if (attempt === TEXT_MAX_ATTEMPTS - 1) throw err;
+            continue;
+        }
+
+        if (!raw) {
+            console.warn('[auto-wallpaper] text model returned empty output');
+            continue;
+        }
+
+        let parsed = null;
+        try {
+            parsed = extractJson(raw);
+        } catch {
+            continue; // invalid JSON -> retry
+        }
+
+        // REUSE: model picked a cached name (possibly humanized — normalize it to
+        // the same kebab-slug shape the generate names use before matching).
+        const action = String(parsed?.action || '').toLowerCase();
+        if (action === 'reuse' && parsed?.name) {
+            const pick = String(parsed.name).trim().toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-+|-+$/g, '');
+            const entry = cache.find(e =>
+                e.name.toLowerCase() === pick
+                || pick.includes(e.name.toLowerCase())
+                || e.name.toLowerCase().includes(pick),
+            );
+            // A reuse name that isn't in the cache is a hallucination -> retry.
+            if (entry) return { mode: 'reuse', entry };
+            console.warn(`[auto-wallpaper] model reused unknown wallpaper "${parsed.name}"`);
+            continue;
+        }
+
+        // GENERATE: explicit action, or any parseable object with a description.
+        const description = String(parsed?.description || '').trim();
+        if (description) {
+            const name = String(parsed?.name || '')
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-+|-+$/g, '');
+            if (name) return { mode: 'generate', setting: { name, description } };
+        }
+
+        // Any other shape -> retry.
+        console.warn('[auto-wallpaper] text model returned an unrecognizable response');
     }
 
-    // GENERATE: explicit action, or any parseable object with a description.
-    const description = String(parsed?.description || '').trim();
-    if (description) {
-        const name = String(parsed?.name || '')
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-+|-+$/g, '');
-        if (name) return { mode: 'generate', setting: { name, description } };
-    }
-
-    // Fallback: unparseable response — generate a generic scene.
-    return { mode: 'generate', setting: { name: `scene-${Date.now()}`, description: raw || 'A generic atmospheric scene.' } };
+    // Exhausted attempts: fall back to a generic scene rather than failing.
+    return { mode: 'generate', setting: { name: `scene-${Date.now()}`, description: 'A generic atmospheric scene.' } };
 }
 
 function buildImagePrompt(settingDescription) {
