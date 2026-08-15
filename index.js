@@ -754,19 +754,20 @@ async function fillImageModelSelect() {
 
 /**
  * Reflects the model-catalog load state in the settings panel:
- * loading, loaded (with counts), or failed (with a retry link).
+ * loading (spinner), loaded (hidden — no persistent count line), or failed
+ * (with a retry link).
  */
-function setModelStatus(state, detail) {
+function setModelStatus(state) {
     const el = $('#cr_model_status');
     if (!el.length) return;
     if (state === 'loading') {
-        el.html('<i class="fa-solid fa-spinner fa-spin"></i> Loading model list…');
+        el.show().html('<i class="fa-solid fa-spinner fa-spin"></i> Loading model list…');
         el.removeClass('aw-model-error');
     } else if (state === 'loaded') {
-        el.text(detail);
+        el.hide();
         el.removeClass('aw-model-error');
     } else {
-        el.html('<i class="fa-solid fa-triangle-exclamation"></i> Couldn\'t load models — <a href="#" id="cr_model_retry">retry</a>');
+        el.show().html('<i class="fa-solid fa-triangle-exclamation"></i> Couldn\'t load models — <a href="#" id="cr_model_retry">retry</a>');
         el.addClass('aw-model-error');
     }
 }
@@ -831,11 +832,11 @@ async function renderSettingsPanel() {
     const populate = async () => {
         setModelStatus('loading');
         try {
-            const catalog = await fetchModelCatalog();
+            await fetchModelCatalog();
             await fillVendorSelect();
             await fillTextModelSelect(getSettings().textVendor);
             await fillImageModelSelect();
-            setModelStatus('loaded', `${catalog.models.length} models from OpenRouter`);
+            setModelStatus('loaded');
         } catch (err) {
             console.warn('[auto-wallpaper] could not load OpenRouter model catalog', err);
             setModelStatus('error');
