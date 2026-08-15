@@ -25,13 +25,13 @@ const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 
 const defaultSettings = Object.freeze({
     imageKey: '',
-    imageModel: 'google/gemini-2.5-flash-image',
+    imageModel: 'krea/krea-2-medium-turbo',
     aspectRatio: '9:16',
     cropRatio: '1:4',
     fitMode: 'cover',
-    textVendor: 'google',
-    textModel: 'google/gemma-4-26b-a4b-it',
-    inferenceProvider: '', // OpenRouter inference provider tag ('' = OpenRouter default routing)
+    textVendor: 'inclusionai',
+    textModel: 'inclusionai/ling-2.6-flash',
+    inferenceProvider: 'novita', // OpenRouter inference provider tag ('' = OpenRouter default routing)
     wallpaperEnabled: true,
     messagesBetweenUpdates: 2,
     wallpaperCache: [],
