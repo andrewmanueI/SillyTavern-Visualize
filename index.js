@@ -68,10 +68,15 @@ function getCache() {
 }
 
 // --- OpenRouter model catalog ---------------------------------------------------
-// Fetched once from GET /api/v1/models. Text models are grouped by vendor (the
-// first segment of the model id). The image selector is FILTERED to genuine
-// image-generation models only (models that emit `image` output, excluding
-// OpenRouter's auto-routers), ordered purely by per-image price low -> high.
+// Fetched once. Two lists:
+//   - text:  GET /api/v1/models — every model, grouped by vendor (first segment
+//            of the model id). This is the chat-completions catalog.
+//   - image: GET /api/v1/models?output_modalities=image — the genuine
+//            image-generation models only (krea, FLUX, recraft, seedream,
+//            gpt-image, gemini image, ...), each with per-image pricing
+//            (pricing.image_output), ordered low -> high.
+// The unfiltered /models list deliberately omits image-only models like krea,
+// so the image selector MUST use the filtered endpoint.
 
 let modelCatalog = null;
 
@@ -99,10 +104,14 @@ function formatImagePrice(price) {
 
 async function fetchModelCatalog() {
     if (modelCatalog) return modelCatalog;
-    const res = await fetch(`${OPENROUTER_BASE}/models`);
-    const data = await res.json();
-    const all = data?.data || [];
-    if (!res.ok || !all.length) throw new Error(data?.error?.message || `models API ${res.status}`);
+    const [chatRes, imageRes] = await Promise.all([
+        fetch(`${OPENROUTER_BASE}/models`),
+        fetch(`${OPENROUTER_BASE}/models?output_modalities=image`),
+    ]);
+    const chatData = await chatRes.json();
+    const imageData = await imageRes.json();
+    const all = chatData?.data || [];
+    if (!chatRes.ok || !all.length) throw new Error(chatData?.error?.message || `models API ${chatRes.status}`);
 
     // Text selector: EVERYTHING OpenRouter lists, grouped by vendor.
     const models = all
@@ -115,14 +124,9 @@ async function fetchModelCatalog() {
 
     const vendors = [...new Set(models.map(m => m.id.split('/')[0]))].sort((a, b) => a.localeCompare(b));
 
-    // Image selector: FILTERED to genuine image-generation models only (models
-    // that emit `image` output, excluding OpenRouter's auto-routers). Ordered
-    // purely by per-image price low -> high (unpriced ones sort last).
-    const isImage = (m) => (m.architecture?.output_modalities || []).includes('image');
-    const isRouter = (m) => String(m.id).startsWith('openrouter/');
-
-    const imageModels = all
-        .filter(m => isImage(m) && !isRouter(m))
+    // Image selector: the dedicated image-generation catalog (krea, FLUX, recraft,
+    // ...), ordered purely by per-image price low -> high (unpriced sort last).
+    const imageModels = (imageData?.data || [])
         .map(m => ({
             id: m.id,
             name: m.name,
