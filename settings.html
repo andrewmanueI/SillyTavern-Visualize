@@ -8,95 +8,205 @@
         </div>
         <div class="inline-drawer-content">
             <div class="marginBot10">
-                <small>Automatically sets a matching (cached, people-free) background wallpaper as the scene changes.</small>
+                <small>
+                    Automatically sets a matching (cached, people-free) background wallpaper as the
+                    scene changes.
+                    <span
+                        class="aw-info"
+                        data-tooltip="Every N completed assistant replies, the extension sends the latest exchange to a text model which picks a cached wallpaper (reuse) or proposes a new people-free scene (generate). New wallpapers are produced by an OpenRouter image model and faded in."
+                        >ⓘ</span
+                    >
+                </small>
             </div>
 
-            <div id="cr_status" class="marginBot10">
-                <div id="cr_status_loading" class="cr-status-line" style="display:none">
+            <!-- Status: always visible -->
+            <div id="cr_status" class="aw-block">
+                <div id="cr_status_loading" class="aw-status-line" style="display: none">
                     <i class="fa-solid fa-spinner fa-spin"></i>
                     <span id="cr_status_loading_text">Generating wallpaper…</span>
                 </div>
-                <div id="cr_status_turns" class="cr-status-line">
+                <div id="cr_status_turns" class="aw-status-line">
                     <span>Turns until next update: <b id="cr_turns_left">{{remainingTurns}}</b></span>
                 </div>
             </div>
 
-            <label class="checkbox_label" for="cr_wallpaper_enabled">
-                <input id="cr_wallpaper_enabled" type="checkbox" class="checkbox" {{#if wallpaperEnabled}}checked{{/if}} />
-                <span>Auto-wallpaper</span>
-            </label>
+            <!-- ══ GENERAL ══ -->
+            <details class="aw-section" open>
+                <summary>
+                    <i class="fa-solid fa-chevron-right aw-section-chevron"></i>
+                    General
+                    <span
+                        class="aw-info"
+                        data-tooltip="Whether the extension runs automatically and how often it triggers."
+                        >ⓘ</span
+                    >
+                </summary>
+                <div class="aw-section-content">
+                    <div class="aw-block">
+                        <label class="checkbox_label">
+                            <input id="cr_wallpaper_enabled" type="checkbox" class="checkbox" {{#if wallpaperEnabled}}checked{{/if}} />
+                            <span>Auto-wallpaper</span>
+                        </label>
+                    </div>
 
-            <label for="cr_messages_between">
-                <span>Assistant replies between updates</span>
-                <small>(default 2 — counts only after the assistant finishes a reply)</small>
-            </label>
-            <input id="cr_messages_between" class="text_pole" type="number" min="1" value="{{messagesBetweenUpdates}}" />
+                    <div class="aw-block">
+                        <label>
+                            Assistant replies between updates:
+                            <b><span id="cr_messages_between_value">{{messagesBetweenUpdates}}</span></b>
+                            <span
+                                class="aw-info"
+                                data-tooltip="How many completed assistant replies pass before the wallpaper is re-analyzed. 1 = every exchange, 4 = every two exchanges. Only counts after the assistant finishes a reply."
+                                >ⓘ</span
+                            >
+                        </label>
+                        <input
+                            id="cr_messages_between"
+                            type="range"
+                            min="1"
+                            max="8"
+                            step="1"
+                            value="{{messagesBetweenUpdates}}"
+                        />
+                    </div>
+                </div>
+            </details>
 
-            <div class="flex-container alignitemscenter spaceBetween marginTop10">
-                <b>Image generation</b>
-            </div>
+            <!-- ══ IMAGE GENERATION ══ -->
+            <details class="aw-section" open>
+                <summary>
+                    <i class="fa-solid fa-chevron-right aw-section-chevron"></i>
+                    Image generation
+                    <span
+                        class="aw-info"
+                        data-tooltip="Settings for the OpenRouter image model that paints the wallpapers."
+                        >ⓘ</span
+                    >
+                </summary>
+                <div class="aw-section-content">
+                    <div class="aw-block">
+                        <label>
+                            OpenRouter API key
+                            <span
+                                class="aw-info"
+                                data-tooltip="Required. Used for both image generation and the text-model call. Stored only in SillyTavern's settings — never in this repository."
+                                >ⓘ</span
+                            >
+                        </label>
+                        <input
+                            id="cr_image_key"
+                            class="text_pole"
+                            type="password"
+                            value="{{imageKey}}"
+                            autocomplete="off"
+                            placeholder="sk-or-..."
+                        />
+                    </div>
 
-            <label for="cr_image_key">
-                <span>OpenRouter API key</span>
-            </label>
-            <input id="cr_image_key" class="text_pole" type="password" value="{{imageKey}}" autocomplete="off" />
+                    <div class="aw-block">
+                        <label>
+                            Image model
+                            <span
+                                class="aw-info"
+                                data-tooltip="Image-generation models served by OpenRouter, ordered by price low → high."
+                                >ⓘ</span
+                            >
+                        </label>
+                        <select id="cr_image_model" class="text_pole">
+                            <option value="{{imageModel}}">{{imageModel}}</option>
+                        </select>
+                        <div id="cr_model_status" class="aw-model-status">
+                            <i class="fa-solid fa-spinner fa-spin"></i> Loading model list…
+                        </div>
+                    </div>
 
-            <label for="cr_image_model">
-                <span>Image model</span>
-                <small>(image-generation models, priced low → high)</small>
-            </label>
-            <select id="cr_image_model" class="text_pole">
-                <option value="{{imageModel}}">{{imageModel}}</option>
-            </select>
+                    <div class="aw-block">
+                        <label>
+                            Aspect ratio
+                            <span
+                                class="aw-info"
+                                data-tooltip="Requested image dimensions. Common values: 1:1, 4:3, 3:2, 16:9, 4:5, 2:3, 9:16."
+                                >ⓘ</span
+                            >
+                        </label>
+                        <input id="cr_aspect_ratio" class="text_pole" type="text" value="{{aspectRatio}}" />
+                    </div>
 
-            <div id="cr_model_status" class="cr-model-status marginTop5">
-                <i class="fa-solid fa-spinner fa-spin"></i> Loading model list…
-            </div>
+                    <div class="aw-block">
+                        <label>
+                            Crop ratio
+                            <span
+                                class="aw-info"
+                                data-tooltip="Final portrait ratio after an optional center-crop. Only used for non-cover fit modes (e.g. stretch)."
+                                >ⓘ</span
+                            >
+                        </label>
+                        <input id="cr_crop_ratio" class="text_pole" type="text" value="{{cropRatio}}" />
+                    </div>
 
-            <label for="cr_aspect_ratio">
-                <span>Aspect ratio</span>
-                <small>(1:1, 4:3, 3:2, 16:9, 4:5, 2:3, 9:16)</small>
-            </label>
-            <input id="cr_aspect_ratio" class="text_pole" type="text" value="{{aspectRatio}}" />
+                    <div class="aw-block">
+                        <label>
+                            Background fit
+                            <span
+                                class="aw-info"
+                                data-tooltip="How the wallpaper is fitted to the screen: cover fills (crops edges), contain fits whole image, stretch distorts, center shows at natural size, classic is the ST default."
+                                >ⓘ</span
+                            >
+                        </label>
+                        <select id="cr_fit_mode" class="text_pole">
+                            <option value="classic">classic</option>
+                            <option value="cover">cover</option>
+                            <option value="contain">contain</option>
+                            <option value="stretch">stretch</option>
+                            <option value="center">center</option>
+                        </select>
+                    </div>
+                </div>
+            </details>
 
-            <label for="cr_crop_ratio">
-                <span>Crop ratio</span>
-                <small>(final portrait ratio, e.g. 1:4 like ST defaults)</small>
-            </label>
-            <input id="cr_crop_ratio" class="text_pole" type="text" value="{{cropRatio}}" />
+            <!-- ══ SCENE ANALYSIS (TEXT) ══ -->
+            <details class="aw-section" open>
+                <summary>
+                    <i class="fa-solid fa-chevron-right aw-section-chevron"></i>
+                    Scene analysis
+                    <span
+                        class="aw-info"
+                        data-tooltip="The text model reads the latest exchange and decides whether to reuse a cached wallpaper or generate a new scene description."
+                        >ⓘ</span
+                    >
+                </summary>
+                <div class="aw-section-content">
+                    <div class="aw-block">
+                        <label>
+                            Text model provider
+                            <span
+                                class="aw-info"
+                                data-tooltip="The OpenRouter vendor that hosts the text model (e.g. google, deepseek, openai)."
+                                >ⓘ</span
+                            >
+                        </label>
+                        <select id="cr_text_provider" class="text_pole">
+                            <option value="{{textVendor}}">{{textVendor}}</option>
+                        </select>
+                    </div>
 
-            <label for="cr_fit_mode">
-                <span>Background fit</span>
-                <small>(classic/cover/contain/stretch/center)</small>
-            </label>
-            <input id="cr_fit_mode" class="text_pole" type="text" value="{{fitMode}}" />
+                    <div class="aw-block">
+                        <label>
+                            Text model
+                            <span
+                                class="aw-info"
+                                data-tooltip="All models from the selected provider. Small MoE models work but may need the built-in retry loop on flaky responses."
+                                >ⓘ</span
+                            >
+                        </label>
+                        <select id="cr_text_model" class="text_pole">
+                            <option value="{{textModel}}">{{textModel}}</option>
+                        </select>
+                    </div>
+                </div>
+            </details>
 
-            <div class="flex-container alignitemscenter spaceBetween marginTop10">
-                <b>Scene analysis (text)</b>
-            </div>
-
-            <label for="cr_text_provider">
-                <span>Text model provider</span>
-                <small>(OpenRouter vendor)</small>
-            </label>
-            <select id="cr_text_provider" class="text_pole">
-                <option value="{{textVendor}}">{{textVendor}}</option>
-            </select>
-
-            <label for="cr_text_model">
-                <span>Text model</span>
-                <small>(all models from the selected provider)</small>
-            </label>
-            <select id="cr_text_model" class="text_pole">
-                <option value="{{textModel}}">{{textModel}}</option>
-            </select>
-
-            <div class="flex-container alignitemscenter spaceBetween marginTop10">
-                <b>Wallpaper library</b>
-            </div>
-            <div id="cr_library" class="auto-wallpaper-library marginTop5"></div>
-
-            <div class="flex-container justifyCenter marginTop10">
+            <!-- ══ ACTIONS ══ -->
+            <div class="aw-block aw-btn-row">
                 <div id="cr_update_now" class="menu_button" title="Analyze the current scene and update the wallpaper now.">
                     <span>Update now</span>
                 </div>
@@ -104,6 +214,10 @@
                     <span>Clear cache</span>
                 </div>
             </div>
+
+            <!-- ══ WALLPAPER LIBRARY ══ -->
+            <p class="aw-section-title">Wallpaper library</p>
+            <div id="cr_library" class="auto-wallpaper-library marginTop5"></div>
         </div>
     </div>
 </div>

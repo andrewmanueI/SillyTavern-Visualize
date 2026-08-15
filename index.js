@@ -761,13 +761,13 @@ function setModelStatus(state, detail) {
     if (!el.length) return;
     if (state === 'loading') {
         el.html('<i class="fa-solid fa-spinner fa-spin"></i> Loading model list…');
-        el.removeClass('cr-model-error');
+        el.removeClass('aw-model-error');
     } else if (state === 'loaded') {
         el.text(detail);
-        el.removeClass('cr-model-error');
+        el.removeClass('aw-model-error');
     } else {
         el.html('<i class="fa-solid fa-triangle-exclamation"></i> Couldn\'t load models — <a href="#" id="cr_model_retry">retry</a>');
-        el.addClass('cr-model-error');
+        el.addClass('aw-model-error');
     }
 }
 
@@ -786,12 +786,15 @@ async function renderSettingsPanel() {
         remainingTurns: Math.max(0, Math.max(1, settings.messagesBetweenUpdates) - messageCount),
     });
     $('#extensions_settings2').append(html);
+
+    // Restore select values that the template can't preselect (fit mode).
+    $('#cr_fit_mode').val(getSettings().fitMode);
     updateStatusUI();
 
     $('#cr_image_key').on('input', () => { getSettings().imageKey = $('#cr_image_key').val(); saveSettingsDebounced(); });
     $('#cr_aspect_ratio').on('input', () => { getSettings().aspectRatio = $('#cr_aspect_ratio').val(); saveSettingsDebounced(); });
     $('#cr_crop_ratio').on('input', () => { getSettings().cropRatio = $('#cr_crop_ratio').val(); saveSettingsDebounced(); });
-    $('#cr_fit_mode').on('input', () => { getSettings().fitMode = $('#cr_fit_mode').val(); saveSettingsDebounced(); });
+    $('#cr_fit_mode').on('change', () => { getSettings().fitMode = $('#cr_fit_mode').val(); saveSettingsDebounced(); });
     $('#cr_image_model').on('change', () => { getSettings().imageModel = $('#cr_image_model').val(); saveSettingsDebounced(); });
     $('#cr_text_provider').on('change', async function () {
         const vendor = $(this).val();
@@ -811,6 +814,8 @@ async function renderSettingsPanel() {
     $('#cr_messages_between').on('input', () => {
         const value = parseInt($('#cr_messages_between').val(), 10);
         getSettings().messagesBetweenUpdates = Number.isFinite(value) && value > 0 ? value : 2;
+        const label = $('#cr_messages_between_value');
+        if (label.length) label.text(String(getSettings().messagesBetweenUpdates));
         saveSettingsDebounced();
         updateStatusUI();
     });
@@ -845,6 +850,41 @@ async function renderSettingsPanel() {
     await renderLibrary();
 }
 
+/**
+ * Injects a single #aw-tooltip div into <body> and wires hover/focus events on
+ * .aw-info elements inside the settings panel. position:fixed escapes ST's
+ * overflow:hidden extensions panel so the tooltip is never clipped.
+ */
+function initTooltips() {
+    document.getElementById('aw-tooltip')?.remove();
+    const tooltip = document.createElement('div');
+    tooltip.id = 'aw-tooltip';
+    document.body.appendChild(tooltip);
+
+    const panel = document.getElementById('auto_wallpaper_settings');
+    if (!panel) return;
+
+    panel.addEventListener('mouseover', (e) => {
+        const target = e.target.closest('.aw-info');
+        if (!target?.dataset.tooltip) return;
+        tooltip.textContent = target.dataset.tooltip;
+        const rect = target.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const tooltipWidth = tooltip.offsetWidth || 260;
+        tooltip.style.left = `${Math.min(rect.left, window.innerWidth - tooltipWidth - 8)}px`;
+        tooltip.style.top = spaceBelow > 80
+            ? `${rect.bottom + 6}px`
+            : `${rect.top - tooltip.offsetHeight - 6}px`;
+        tooltip.classList.add('aw-tooltip-visible');
+    });
+
+    panel.addEventListener('mouseout', (e) => {
+        if (e.target.closest('.aw-info')) {
+            tooltip.classList.remove('aw-tooltip-visible');
+        }
+    });
+}
+
 export function init() {
     const buttonHtml = `
         <div id="cr_recap" class="list-group-item flex-container flexGap5">
@@ -868,5 +908,6 @@ export function init() {
     ctx.eventSource.on(ctx.eventTypes.MESSAGE_SENT, onMessageSent);
 
     renderSettingsPanel();
+    initTooltips();
     console.debug('[auto-wallpaper] extension initialized');
 }

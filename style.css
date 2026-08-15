@@ -95,3 +95,176 @@
     color: inherit;
     text-decoration: underline;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Settings panel — Smart-Memory-inspired layout.
+   Theme-adaptive: currentColor / low-opacity neutrals / ST design tokens only.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Consistent spacing between groups of controls. */
+#auto_wallpaper_settings .aw-block {
+    margin-bottom: 10px;
+}
+
+/* Flex row where every direct child stretches to an equal share. */
+#auto_wallpaper_settings .aw-btn-row {
+    display: flex;
+    gap: 6px;
+}
+
+#auto_wallpaper_settings .aw-btn-row > .menu_button {
+    flex: 1;
+}
+
+/* Sub-section titles: small all-caps labels with a bottom rule. */
+#auto_wallpaper_settings .aw-section-title {
+    margin: 12px 0 6px;
+    font-size: 0.68em;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    opacity: 0.5;
+    border-bottom: 1px solid rgba(128, 128, 128, 0.25);
+    padding-bottom: 4px;
+}
+
+#auto_wallpaper_settings .aw-section-content > .aw-section-title:first-child {
+    margin-top: 4px;
+}
+
+/* Accordion sections. */
+#auto_wallpaper_settings details.aw-section {
+    margin-top: 2px;
+}
+
+#auto_wallpaper_settings details.aw-section > summary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 2px 4px;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    font-size: 0.68em;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    opacity: 0.55;
+    border-bottom: 1px solid rgba(128, 128, 128, 0.25);
+}
+
+#auto_wallpaper_settings details.aw-section > summary::-webkit-details-marker {
+    display: none;
+}
+
+#auto_wallpaper_settings details.aw-section > summary:hover {
+    opacity: 0.8;
+}
+
+#auto_wallpaper_settings details.aw-section > summary .aw-section-chevron {
+    font-size: 0.75em;
+    transition: transform 0.18s ease;
+    flex-shrink: 0;
+}
+
+#auto_wallpaper_settings details.aw-section[open] > summary .aw-section-chevron {
+    transform: rotate(90deg);
+}
+
+#auto_wallpaper_settings details.aw-section > .aw-section-content {
+    padding: 6px 0 6px 0;
+}
+
+/* Block labels wrap their controls (Smart-Memory pattern). */
+#auto_wallpaper_settings .aw-block label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+#auto_wallpaper_settings .aw-block label.checkbox_label {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+}
+
+#auto_wallpaper_settings .aw-block .text_pole {
+    width: 100%;
+}
+
+/* Info icon + shared tooltip. */
+#auto_wallpaper_settings .aw-info {
+    display: inline-block;
+    cursor: help;
+    font-style: normal;
+    font-size: 0.85em;
+    margin-left: 3px;
+    opacity: 0.4;
+    vertical-align: middle;
+    transition: opacity 0.1s ease;
+}
+
+#auto_wallpaper_settings .aw-info:hover,
+#auto_wallpaper_settings .aw-info:focus {
+    opacity: 0.85;
+    outline: none;
+}
+
+#aw-tooltip {
+    position: fixed;
+    z-index: 99999;
+    max-width: 360px;
+    padding: 7px 10px;
+    border-radius: 5px;
+    background: rgba(18, 18, 18, 0.93);
+    color: #e8e8e8;
+    font-size: 0.78rem;
+    font-weight: 400;
+    line-height: 1.45;
+    white-space: pre-line;
+    pointer-events: none;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.35);
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+#aw-tooltip.aw-tooltip-visible {
+    opacity: 1;
+}
+
+/* Status lines (turns-until-update + generation). */
+#auto_wallpaper_settings .aw-status-line {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85em;
+}
+
+#auto_wallpaper_settings .aw-status-line i {
+    color: var(--SmartThemeBodyColor);
+}
+
+/* Model-catalog status inside the image block. */
+#auto_wallpaper_settings .aw-model-status {
+    font-size: 0.8em;
+    color: var(--SmartThemeBodyColor);
+    opacity: 0.75;
+    margin-top: 4px;
+}
+
+#auto_wallpaper_settings .aw-model-status.aw-model-error {
+    color: var(--SmartThemeErrorColor, #f66);
+    opacity: 1;
+}
+
+#auto_wallpaper_settings .aw-model-status.aw-model-error a {
+    color: inherit;
+    text-decoration: underline;
+}
+
+/* Range sliders get a touch more breathing room. */
+#auto_wallpaper_settings input[type='range'] {
+    width: 100%;
+    accent-color: var(--SmartColor, #7b68ee);
+}
