@@ -1,4 +1,4 @@
-# SillyTavern-AutoWallpaper
+# SillyTavern-Visualize
 
 A [SillyTavern](https://github.com/SillyTavern/SillyTavern) third-party extension that **automatically keeps the chat background in sync with the current roleplay scene**.
 
@@ -15,7 +15,7 @@ Generated wallpapers are **portrait (9:16)**, scene-only (no people/characters/t
 1. In SillyTavern, open **Extensions → Install Extension** (the "Install extension" button in the Extensions drawer).
 2. Paste this repository URL:
    ```
-   https://github.com/andrewmanueI/SillyTavern-AutoWallpaper
+   https://github.com/andrewmanueI/SillyTavern-Visualize
    ```
    (optionally specify a branch) and install.
 3. Reload the page.
@@ -23,10 +23,10 @@ Generated wallpapers are **portrait (9:16)**, scene-only (no people/characters/t
 ## Setup
 
 1. Make sure you have an API connection configured in SillyTavern (for chat replies).
-2. Open **Extensions → Auto-Wallpaper** settings and paste your **OpenRouter API key** (required — the extension calls OpenRouter's Image API directly for wallpapers).
+2. Open **Extensions → Visualize** settings and paste your **OpenRouter API key** (required — the extension calls OpenRouter's Image API directly for wallpapers).
 3. Model selectors are populated from [OpenRouter's model API](https://openrouter.ai/docs/api-reference/list-available-models): **Text model provider** (the vendor, e.g. `inclusionai`), **Text model** (models from that vendor, default `inclusionai/ling-2.6-flash`), **Inference provider** (the OpenRouter endpoint serving the text model, default `novita`; `Auto` lets OpenRouter load-balance), and **Image model** (image-generation models **sorted by price low → high**, default `krea/krea-2-medium-turbo`). Optionally adjust: aspect ratio (`9:16`), crop ratio (used only for non-cover fit modes), background fit (`cover`), assistant replies between updates.
 
-That's it — chat normally and the background updates itself as the scene changes. You can also force an update with the **"Update now"** button, the wand-menu **"Auto Wallpaper"** button, or the **`/wallpaper`** slash command.
+That's it — chat normally and the background updates itself as the scene changes. You can also force an update with the **"Update now"** button, the wand-menu **"Visualize"** button, or the **`/wallpaper`** slash command.
 
 ## Files
 

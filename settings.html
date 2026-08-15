@@ -1,8 +1,8 @@
-<div id="auto_wallpaper_settings">
+<div id="stv_settings">
     <div class="inline-drawer">
         <div class="inline-drawer-toggle inline-drawer-header">
             <div class="flex-container alignitemscenter margin0">
-                <b>Auto-Wallpaper</b>
+                <b>Visualize</b>
             </div>
             <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
         </div>
@@ -12,7 +12,7 @@
                     Automatically sets a matching (cached, people-free) background wallpaper as the
                     scene changes.
                     <span
-                        class="aw-info"
+                        class="stv-info"
                         data-tooltip="Every N completed assistant replies, the extension sends the latest exchange to a text model which picks a cached wallpaper (reuse) or proposes a new people-free scene (generate). New wallpapers are produced by an OpenRouter image model and faded in."
                         >ⓘ</span
                     >
@@ -20,47 +20,47 @@
             </div>
 
             <!-- Status: always visible -->
-            <div id="cr_status" class="aw-block">
-                <div id="cr_status_loading" class="aw-status-line" style="display: none">
+            <div id="stv_status" class="stv-block">
+                <div id="stv_status_loading" class="stv-status-line" style="display: none">
                     <i class="fa-solid fa-spinner fa-spin"></i>
-                    <span id="cr_status_loading_text">Generating wallpaper…</span>
+                    <span id="stv_status_loading_text">Generating wallpaper…</span>
                 </div>
-                <div id="cr_status_turns" class="aw-status-line">
-                    <span>Turns until next update: <b id="cr_turns_left">{{remainingTurns}}</b></span>
+                <div id="stv_status_turns" class="stv-status-line">
+                    <span>Turns until next update: <b id="stv_turns_left">{{remainingTurns}}</b></span>
                 </div>
             </div>
 
             <!-- ══ GENERAL ══ -->
-            <details class="aw-section">
+            <details class="stv-section">
                 <summary>
-                    <i class="fa-solid fa-chevron-right aw-section-chevron"></i>
+                    <i class="fa-solid fa-chevron-right stv-section-chevron"></i>
                     General
                     <span
-                        class="aw-info"
+                        class="stv-info"
                         data-tooltip="Whether the extension runs automatically and how often it triggers."
                         >ⓘ</span
                     >
                 </summary>
-                <div class="aw-section-content">
-                    <div class="aw-block">
+                <div class="stv-section-content">
+                    <div class="stv-block">
                         <label class="checkbox_label">
-                            <input id="cr_wallpaper_enabled" type="checkbox" class="checkbox" {{#if wallpaperEnabled}}checked{{/if}} />
+                            <input id="stv_wallpaper_enabled" type="checkbox" class="checkbox" {{#if wallpaperEnabled}}checked{{/if}} />
                             <span>Auto-wallpaper</span>
                         </label>
                     </div>
 
-                    <div class="aw-block">
+                    <div class="stv-block">
                         <label>
                             Assistant replies between updates:
-                            <b><span id="cr_messages_between_value">{{messagesBetweenUpdates}}</span></b>
+                            <b><span id="stv_messages_between_value">{{messagesBetweenUpdates}}</span></b>
                             <span
-                                class="aw-info"
+                                class="stv-info"
                                 data-tooltip="How many completed assistant replies pass before the wallpaper is re-analyzed. 1 = every exchange, 4 = every two exchanges. Only counts after the assistant finishes a reply."
                                 >ⓘ</span
                             >
                         </label>
                         <input
-                            id="cr_messages_between"
+                            id="stv_messages_between"
                             type="range"
                             min="1"
                             max="8"
@@ -72,28 +72,28 @@
             </details>
 
             <!-- ══ IMAGE GENERATION ══ -->
-            <details class="aw-section">
+            <details class="stv-section">
                 <summary>
-                    <i class="fa-solid fa-chevron-right aw-section-chevron"></i>
+                    <i class="fa-solid fa-chevron-right stv-section-chevron"></i>
                     Image generation
                     <span
-                        class="aw-info"
+                        class="stv-info"
                         data-tooltip="Settings for the OpenRouter image model that paints the wallpapers."
                         >ⓘ</span
                     >
                 </summary>
-                <div class="aw-section-content">
-                    <div class="aw-block">
+                <div class="stv-section-content">
+                    <div class="stv-block">
                         <label>
                             OpenRouter API key
                             <span
-                                class="aw-info"
+                                class="stv-info"
                                 data-tooltip="Required. Used for both image generation and the text-model call. Stored only in SillyTavern's settings — never in this repository."
                                 >ⓘ</span
                             >
                         </label>
                         <input
-                            id="cr_image_key"
+                            id="stv_image_key"
                             class="text_pole"
                             type="password"
                             value="{{imageKey}}"
@@ -102,57 +102,57 @@
                         />
                     </div>
 
-                    <div class="aw-block">
+                    <div class="stv-block">
                         <label>
                             Image model
                             <span
-                                class="aw-info"
+                                class="stv-info"
                                 data-tooltip="Image-generation models served by OpenRouter, ordered by price low → high."
                                 >ⓘ</span
                             >
                         </label>
-                        <select id="cr_image_model" class="text_pole">
+                        <select id="stv_image_model" class="text_pole">
                             <option value="{{imageModel}}">{{imageModel}}</option>
                         </select>
-                        <div id="cr_model_status" class="aw-model-status">
+                        <div id="stv_model_status" class="stv-model-status">
                             <i class="fa-solid fa-spinner fa-spin"></i> Loading model list…
                         </div>
                     </div>
 
-                    <div class="aw-block">
+                    <div class="stv-block">
                         <label>
                             Aspect ratio
                             <span
-                                class="aw-info"
+                                class="stv-info"
                                 data-tooltip="Requested image dimensions. Common values: 1:1, 4:3, 3:2, 16:9, 4:5, 2:3, 9:16."
                                 >ⓘ</span
                             >
                         </label>
-                        <input id="cr_aspect_ratio" class="text_pole" type="text" value="{{aspectRatio}}" />
+                        <input id="stv_aspect_ratio" class="text_pole" type="text" value="{{aspectRatio}}" />
                     </div>
 
-                    <div class="aw-block">
+                    <div class="stv-block">
                         <label>
                             Crop ratio
                             <span
-                                class="aw-info"
+                                class="stv-info"
                                 data-tooltip="Final portrait ratio after an optional center-crop. Only used for non-cover fit modes (e.g. stretch)."
                                 >ⓘ</span
                             >
                         </label>
-                        <input id="cr_crop_ratio" class="text_pole" type="text" value="{{cropRatio}}" />
+                        <input id="stv_crop_ratio" class="text_pole" type="text" value="{{cropRatio}}" />
                     </div>
 
-                    <div class="aw-block">
+                    <div class="stv-block">
                         <label>
                             Background fit
                             <span
-                                class="aw-info"
+                                class="stv-info"
                                 data-tooltip="How the wallpaper is fitted to the screen: cover fills (crops edges), contain fits whole image, stretch distorts, center shows at natural size, classic is the ST default."
                                 >ⓘ</span
                             >
                         </label>
-                        <select id="cr_fit_mode" class="text_pole">
+                        <select id="stv_fit_mode" class="text_pole">
                             <option value="classic">classic</option>
                             <option value="cover">cover</option>
                             <option value="contain">contain</option>
@@ -164,55 +164,55 @@
             </details>
 
             <!-- ══ SCENE ANALYSIS (TEXT) ══ -->
-            <details class="aw-section">
+            <details class="stv-section">
                 <summary>
-                    <i class="fa-solid fa-chevron-right aw-section-chevron"></i>
+                    <i class="fa-solid fa-chevron-right stv-section-chevron"></i>
                     Scene analysis
                     <span
-                        class="aw-info"
+                        class="stv-info"
                         data-tooltip="The text model reads the latest exchange and decides whether to reuse a cached wallpaper or generate a new scene description."
                         >ⓘ</span
                     >
                 </summary>
-                <div class="aw-section-content">
-                    <div class="aw-block">
+                <div class="stv-section-content">
+                    <div class="stv-block">
                         <label>
                             Text model provider
                             <span
-                                class="aw-info"
+                                class="stv-info"
                                 data-tooltip="The OpenRouter vendor that hosts the text model (e.g. google, deepseek, openai)."
                                 >ⓘ</span
                             >
                         </label>
-                        <select id="cr_text_provider" class="text_pole">
+                        <select id="stv_text_provider" class="text_pole">
                             <option value="{{textVendor}}">{{textVendor}}</option>
                         </select>
                     </div>
 
-                    <div class="aw-block">
+                    <div class="stv-block">
                         <label>
                             Text model
                             <span
-                                class="aw-info"
+                                class="stv-info"
                                 data-tooltip="All models from the selected provider. Small MoE models work but may need the built-in retry loop on flaky responses."
                                 >ⓘ</span
                             >
                         </label>
-                        <select id="cr_text_model" class="text_pole">
+                        <select id="stv_text_model" class="text_pole">
                             <option value="{{textModel}}">{{textModel}}</option>
                         </select>
                     </div>
 
-                    <div class="aw-block">
+                    <div class="stv-block">
                         <label>
                             Inference provider
                             <span
-                                class="aw-info"
+                                class="stv-info"
                                 data-tooltip="Which OpenRouter inference provider (endpoint) serves the scene-analysis model. Only providers actually available for the selected model are listed — they come straight from OpenRouter's per-model endpoints. 'Auto' lets OpenRouter load-balance by default."
                                 >ⓘ</span
                             >
                         </label>
-                        <select id="cr_inference_provider" class="text_pole">
+                        <select id="stv_inference_provider" class="text_pole">
                             <option value="">Auto (OpenRouter default)</option>
                         </select>
                     </div>
@@ -220,18 +220,18 @@
             </details>
 
             <!-- ══ ACTIONS ══ -->
-            <div class="aw-block aw-btn-row">
-                <div id="cr_update_now" class="menu_button" title="Analyze the current scene and update the wallpaper now.">
+            <div class="stv-block stv-btn-row">
+                <div id="stv_update_now" class="menu_button" title="Analyze the current scene and update the wallpaper now.">
                     <span>Update now</span>
                 </div>
-                <div id="cr_clear_cache" class="menu_button" title="Remove cached wallpapers so new scenes regenerate.">
+                <div id="stv_clear_cache" class="menu_button" title="Remove cached wallpapers so new scenes regenerate.">
                     <span>Clear cache</span>
                 </div>
             </div>
 
             <!-- ══ WALLPAPER LIBRARY ══ -->
-            <p class="aw-section-title">Wallpaper library</p>
-            <div id="cr_library" class="auto-wallpaper-library marginTop5"></div>
+            <p class="stv-section-title">Wallpaper library</p>
+            <div id="stv_library" class="visualize-library marginTop5"></div>
         </div>
     </div>
 </div>

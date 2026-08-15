@@ -1,4 +1,4 @@
-// Auto-Wallpaper: automatically keeps the background wallpaper in sync with the
+// Visualize: automatically keeps the background wallpaper in sync with the
 // current roleplay scene.
 //
 // Every N completed assistant replies (default 2) it sends the latest exchange to
@@ -20,7 +20,7 @@ import { background_settings } from '../../../backgrounds.js';
 import { SlashCommand } from '../../../slash-commands/SlashCommand.js';
 import { SlashCommandParser } from '../../../slash-commands/SlashCommandParser.js';
 
-const MODULE_NAME = 'auto_wallpaper';
+const MODULE_NAME = 'visualize';
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 
 const defaultSettings = Object.freeze({
@@ -40,7 +40,7 @@ const defaultSettings = Object.freeze({
 let messageCount = 0;
 let isUpdating = false;
 
-const FADE_LAYER_ID = 'cr_bg_fade';
+const FADE_LAYER_ID = 'stv_bg_fade';
 const FADE_MS = 700;
 
 // Retry policy for the text-model call. Small MoE models (e.g. ling-2.6-flash)
@@ -55,7 +55,12 @@ const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 function getSettings() {
     const { extensionSettings } = getContext();
-    // Migrate settings from the old 'chat_recap' key (folder was renamed to auto-wallpaper).
+    // Migrate settings from the old 'auto_wallpaper' and 'chat_recap' keys
+    // (extension renamed to Visualize).
+    if (!extensionSettings[MODULE_NAME] && extensionSettings.auto_wallpaper) {
+        extensionSettings[MODULE_NAME] = extensionSettings.auto_wallpaper;
+        delete extensionSettings.auto_wallpaper;
+    }
     if (!extensionSettings[MODULE_NAME] && extensionSettings.chat_recap) {
         extensionSettings[MODULE_NAME] = extensionSettings.chat_recap;
         delete extensionSettings.chat_recap;
@@ -195,7 +200,7 @@ async function fetchModelProviders(modelId) {
             }
         }
     } catch (err) {
-        console.warn('[auto-wallpaper] could not load inference providers', err?.message);
+        console.warn('[visualize] could not load inference providers', err?.message);
     }
     providers.sort((a, b) => a.name.localeCompare(b.name));
     providerCache[modelId] = providers;
@@ -203,7 +208,7 @@ async function fetchModelProviders(modelId) {
 }
 
 async function fillInferenceProviderSelect(modelId) {
-    const select = $('#cr_inference_provider');
+    const select = $('#stv_inference_provider');
     if (!select.length) return;
     const providers = await fetchModelProviders(modelId);
     select.empty();
@@ -298,7 +303,7 @@ async function chatCompletion(messages, settings, maxTokens = 200) {
     for (let attempt = 0; attempt < API_MAX_ATTEMPTS; attempt++) {
         if (attempt > 0) {
             await sleep(API_RETRY_DELAY_MS * attempt);
-            console.warn(`[auto-wallpaper] text API attempt ${attempt + 1}/${API_MAX_ATTEMPTS} after: ${lastError?.message}`);
+            console.warn(`[visualize] text API attempt ${attempt + 1}/${API_MAX_ATTEMPTS} after: ${lastError?.message}`);
         }
         try {
             const body = { model: settings.textModel, messages, max_tokens: maxTokens };
@@ -368,7 +373,7 @@ async function decideWallpaper(messages, cache, settings) {
     for (let attempt = 0; attempt < TEXT_MAX_ATTEMPTS; attempt++) {
         if (attempt > 0) {
             await sleep(TEXT_RETRY_DELAY_MS * attempt);
-            console.warn(`[auto-wallpaper] invalid text response, retrying ${attempt + 1}/${TEXT_MAX_ATTEMPTS}`);
+            console.warn(`[visualize] invalid text response, retrying ${attempt + 1}/${TEXT_MAX_ATTEMPTS}`);
             setLoading(true, `Analyzing scene… (retry ${attempt + 1}/${TEXT_MAX_ATTEMPTS})`);
         }
 
@@ -378,13 +383,13 @@ async function decideWallpaper(messages, cache, settings) {
         } catch (err) {
             // chatCompletion already retried transient failures; retry the whole
             // attempt while we have attempts left, otherwise propagate.
-            console.warn('[auto-wallpaper] text call failed', err?.message);
+            console.warn('[visualize] text call failed', err?.message);
             if (attempt === TEXT_MAX_ATTEMPTS - 1) throw err;
             continue;
         }
 
         if (!raw) {
-            console.warn('[auto-wallpaper] text model returned empty output');
+            console.warn('[visualize] text model returned empty output');
             continue;
         }
 
@@ -409,7 +414,7 @@ async function decideWallpaper(messages, cache, settings) {
             );
             // A reuse name that isn't in the cache is a hallucination -> retry.
             if (entry) return { mode: 'reuse', entry };
-            console.warn(`[auto-wallpaper] model reused unknown wallpaper "${parsed.name}"`);
+            console.warn(`[visualize] model reused unknown wallpaper "${parsed.name}"`);
             continue;
         }
 
@@ -424,7 +429,7 @@ async function decideWallpaper(messages, cache, settings) {
         }
 
         // Any other shape -> retry.
-        console.warn('[auto-wallpaper] text model returned an unrecognizable response');
+        console.warn('[visualize] text model returned an unrecognizable response');
     }
 
     // Exhausted attempts: fall back to a generic scene rather than failing.
@@ -516,7 +521,7 @@ function setFitting(fitting) {
 // --- Background crossfade -------------------------------------------------------
 // CSS cannot interpolate `background-image`, so a plain change of #bg1's image snaps
 // instantly. To crossfade we preload the new wallpaper, paint it on a clone layer
-// (#cr_bg_fade) that sits exactly over #bg1, fade the clone in over the old image,
+// (#stv_bg_fade) that sits exactly over #bg1, fade the clone in over the old image,
 // then commit the change to #bg1 (the element ST persists) and clean up.
 
 function ensureFadeLayer() {
@@ -626,7 +631,7 @@ async function generateWallpaper(setting, settings) {
         croppedDataUrl = await cropToRatio(sourceDataUrl, wRatio, hRatio);
     }
     const blob = dataURLToBlob(croppedDataUrl);
-    const filename = `auto-wallpaper-${setting.name}.${extensionForMediaType(mediaType)}`;
+    const filename = `visualize-${setting.name}.${extensionForMediaType(mediaType)}`;
 
     const formData = new FormData();
     formData.append('avatar', new File([blob], filename, { type: mediaType }));
@@ -657,7 +662,7 @@ async function updateWallpaper() {
     const settings = getSettings();
 
     if (!settings.imageKey) {
-        console.warn('[auto-wallpaper] no OpenRouter API key set');
+        console.warn('[visualize] no OpenRouter API key set');
         return;
     }
 
@@ -683,7 +688,7 @@ async function updateWallpaper() {
             await renderLibrary();
         }
     } catch (err) {
-        console.error('[auto-wallpaper] failed', err);
+        console.error('[visualize] failed', err);
     } finally {
         isUpdating = false;
         setLoading(false);
@@ -711,15 +716,15 @@ function onMessageReceived(messageId, type) {
 
 /**
  * Reflects the current "turns until next auto-update" counter and the
- * auto-wallpaper on/off state in the settings panel and the wand-menu badge.
+ * visualize on/off state in the settings panel and the wand-menu badge.
  */
 function updateStatusUI() {
     const settings = getSettings();
     const enabled = settings.wallpaperEnabled;
     const total = Math.max(1, settings.messagesBetweenUpdates);
     const remaining = Math.max(0, total - messageCount);
-    const badge = $('#cr_recap_count');
-    const turns = $('#cr_turns_left');
+    const badge = $('#stv_recap_count');
+    const turns = $('#stv_turns_left');
     if (badge.length) {
         badge.text(enabled ? String(remaining) : '');
         badge.toggleClass('cr-count-hidden', !enabled);
@@ -732,14 +737,14 @@ function updateStatusUI() {
  * wand-menu icon while a wallpaper update is in progress.
  */
 function setLoading(active, text) {
-    const spinner = $('#cr_status_loading');
-    const turnsRow = $('#cr_status_turns');
-    const icon = $('#cr_recap .extensionsMenuExtensionButton');
+    const spinner = $('#stv_status_loading');
+    const turnsRow = $('#stv_status_turns');
+    const icon = $('#stv_recap .extensionsMenuExtensionButton');
     if (active) {
         if (spinner.length) {
             spinner.css('display', '');
-            if (text && $('#cr_status_loading_text').length) {
-                $('#cr_status_loading_text').text(text);
+            if (text && $('#stv_status_loading_text').length) {
+                $('#stv_status_loading_text').text(text);
             }
         }
         if (turnsRow.length) turnsRow.css('display', 'none');
@@ -762,14 +767,14 @@ async function renderLibrary() {
         description: e.description || '',
         thumbnail: getThumbnailUrl('bg', e.filename),
     }));
-    const html = await renderExtensionTemplateAsync('third-party/SillyTavern-AutoWallpaper', 'library', { items });
-    const container = $('#cr_library');
+    const html = await renderExtensionTemplateAsync('third-party/SillyTavern-Visualize', 'library', { items });
+    const container = $('#stv_library');
     if (container.length) container.html(html);
 }
 
 async function fillVendorSelect() {
     const catalog = await fetchModelCatalog();
-    const select = $('#cr_text_provider');
+    const select = $('#stv_text_provider');
     if (!select.length) return;
     select.empty();
     for (const vendor of catalog.vendors) {
@@ -780,7 +785,7 @@ async function fillVendorSelect() {
 
 async function fillTextModelSelect(vendor) {
     const catalog = await fetchModelCatalog();
-    const select = $('#cr_text_model');
+    const select = $('#stv_text_model');
     if (!select.length) return;
     const models = catalog.models.filter(m => m.id.startsWith(`${vendor}/`));
     select.empty();
@@ -800,7 +805,7 @@ async function fillTextModelSelect(vendor) {
 
 async function fillImageModelSelect() {
     const catalog = await fetchModelCatalog();
-    const select = $('#cr_image_model');
+    const select = $('#stv_image_model');
     if (!select.length) return;
     select.empty();
     for (const m of catalog.imageModels) {
@@ -825,23 +830,23 @@ async function fillImageModelSelect() {
  * (with a retry link).
  */
 function setModelStatus(state) {
-    const el = $('#cr_model_status');
+    const el = $('#stv_model_status');
     if (!el.length) return;
     if (state === 'loading') {
         el.show().html('<i class="fa-solid fa-spinner fa-spin"></i> Loading model list…');
-        el.removeClass('aw-model-error');
+        el.removeClass('stv-model-error');
     } else if (state === 'loaded') {
         el.hide();
-        el.removeClass('aw-model-error');
+        el.removeClass('stv-model-error');
     } else {
-        el.show().html('<i class="fa-solid fa-triangle-exclamation"></i> Couldn\'t load models — <a href="#" id="cr_model_retry">retry</a>');
-        el.addClass('aw-model-error');
+        el.show().html('<i class="fa-solid fa-triangle-exclamation"></i> Couldn\'t load models — <a href="#" id="stv_model_retry">retry</a>');
+        el.addClass('stv-model-error');
     }
 }
 
 async function renderSettingsPanel() {
     const settings = getSettings();
-    const html = await renderExtensionTemplateAsync('third-party/SillyTavern-AutoWallpaper', 'settings', {
+    const html = await renderExtensionTemplateAsync('third-party/SillyTavern-Visualize', 'settings', {
         imageKey: settings.imageKey,
         imageModel: settings.imageModel,
         aspectRatio: settings.aspectRatio,
@@ -856,16 +861,16 @@ async function renderSettingsPanel() {
     $('#extensions_settings2').append(html);
 
     // Restore select values that the template can't preselect (fit mode).
-    $('#cr_fit_mode').val(getSettings().fitMode);
+    $('#stv_fit_mode').val(getSettings().fitMode);
     updateStatusUI();
     initTooltips();
 
-    $('#cr_image_key').on('input', () => { getSettings().imageKey = $('#cr_image_key').val(); saveSettingsDebounced(); });
-    $('#cr_aspect_ratio').on('input', () => { getSettings().aspectRatio = $('#cr_aspect_ratio').val(); saveSettingsDebounced(); });
-    $('#cr_crop_ratio').on('input', () => { getSettings().cropRatio = $('#cr_crop_ratio').val(); saveSettingsDebounced(); });
-    $('#cr_fit_mode').on('change', () => { getSettings().fitMode = $('#cr_fit_mode').val(); saveSettingsDebounced(); });
-    $('#cr_image_model').on('change', () => { getSettings().imageModel = $('#cr_image_model').val(); saveSettingsDebounced(); });
-    $('#cr_text_provider').on('change', async function () {
+    $('#stv_image_key').on('input', () => { getSettings().imageKey = $('#stv_image_key').val(); saveSettingsDebounced(); });
+    $('#stv_aspect_ratio').on('input', () => { getSettings().aspectRatio = $('#stv_aspect_ratio').val(); saveSettingsDebounced(); });
+    $('#stv_crop_ratio').on('input', () => { getSettings().cropRatio = $('#stv_crop_ratio').val(); saveSettingsDebounced(); });
+    $('#stv_fit_mode').on('change', () => { getSettings().fitMode = $('#stv_fit_mode').val(); saveSettingsDebounced(); });
+    $('#stv_image_model').on('change', () => { getSettings().imageModel = $('#stv_image_model').val(); saveSettingsDebounced(); });
+    $('#stv_text_provider').on('change', async function () {
         const vendor = $(this).val();
         getSettings().textVendor = vendor;
         saveSettingsDebounced();
@@ -874,28 +879,28 @@ async function renderSettingsPanel() {
         // the first model in the new vendor's list.
         const current = getSettings().textModel;
         if (!current.startsWith(`${vendor}/`)) {
-            getSettings().textModel = $('#cr_text_model').val();
+            getSettings().textModel = $('#stv_text_model').val();
             saveSettingsDebounced();
         }
         fillInferenceProviderSelect(getSettings().textModel);
     });
-    $('#cr_text_model').on('change', function () {
+    $('#stv_text_model').on('change', function () {
         getSettings().textModel = $(this).val();
         saveSettingsDebounced();
         fillInferenceProviderSelect($(this).val());
     });
-    $('#cr_inference_provider').on('change', () => { getSettings().inferenceProvider = $('#cr_inference_provider').val(); saveSettingsDebounced(); });
-    $('#cr_wallpaper_enabled').on('change', () => { getSettings().wallpaperEnabled = $('#cr_wallpaper_enabled').is(':checked'); saveSettingsDebounced(); });
-    $('#cr_messages_between').on('input', () => {
-        const value = parseInt($('#cr_messages_between').val(), 10);
+    $('#stv_inference_provider').on('change', () => { getSettings().inferenceProvider = $('#stv_inference_provider').val(); saveSettingsDebounced(); });
+    $('#stv_wallpaper_enabled').on('change', () => { getSettings().wallpaperEnabled = $('#stv_wallpaper_enabled').is(':checked'); saveSettingsDebounced(); });
+    $('#stv_messages_between').on('input', () => {
+        const value = parseInt($('#stv_messages_between').val(), 10);
         getSettings().messagesBetweenUpdates = Number.isFinite(value) && value > 0 ? value : 2;
-        const label = $('#cr_messages_between_value');
+        const label = $('#stv_messages_between_value');
         if (label.length) label.text(String(getSettings().messagesBetweenUpdates));
         saveSettingsDebounced();
         updateStatusUI();
     });
-    $('#cr_update_now').on('click', () => updateWallpaper());
-    $('#cr_clear_cache').on('click', () => {
+    $('#stv_update_now').on('click', () => updateWallpaper());
+    $('#stv_clear_cache').on('click', () => {
         getSettings().wallpaperCache = [];
         saveSettingsDebounced();
         renderLibrary();
@@ -912,12 +917,12 @@ async function renderSettingsPanel() {
             await fillImageModelSelect();
             setModelStatus('loaded');
         } catch (err) {
-            console.warn('[auto-wallpaper] could not load OpenRouter model catalog', err);
+            console.warn('[visualize] could not load OpenRouter model catalog', err);
             setModelStatus('error');
         }
     };
     await populate();
-    $('#cr_model_retry').on('click', (e) => {
+    $('#stv_model_retry').on('click', (e) => {
         e.preventDefault();
         modelCatalog = null; // force refetch
         populate();
@@ -927,21 +932,21 @@ async function renderSettingsPanel() {
 }
 
 /**
- * Injects a single #aw-tooltip div into <body> and wires hover/focus events on
- * .aw-info elements inside the settings panel. position:fixed escapes ST's
+ * Injects a single #stv-tooltip div into <body> and wires hover/focus events on
+ * .stv-info elements inside the settings panel. position:fixed escapes ST's
  * overflow:hidden extensions panel so the tooltip is never clipped.
  */
 function initTooltips() {
-    document.getElementById('aw-tooltip')?.remove();
+    document.getElementById('stv-tooltip')?.remove();
     const tooltip = document.createElement('div');
-    tooltip.id = 'aw-tooltip';
+    tooltip.id = 'stv-tooltip';
     document.body.appendChild(tooltip);
 
-    const panel = document.getElementById('auto_wallpaper_settings');
+    const panel = document.getElementById('stv_settings');
     if (!panel) return;
 
     panel.addEventListener('mouseover', (e) => {
-        const target = e.target.closest('.aw-info');
+        const target = e.target.closest('.stv-info');
         if (!target?.dataset.tooltip) return;
         tooltip.textContent = target.dataset.tooltip;
         const rect = target.getBoundingClientRect();
@@ -951,26 +956,26 @@ function initTooltips() {
         tooltip.style.top = spaceBelow > 80
             ? `${rect.bottom + 6}px`
             : `${rect.top - tooltip.offsetHeight - 6}px`;
-        tooltip.classList.add('aw-tooltip-visible');
+        tooltip.classList.add('stv-tooltip-visible');
     });
 
     panel.addEventListener('mouseout', (e) => {
-        if (e.target.closest('.aw-info')) {
-            tooltip.classList.remove('aw-tooltip-visible');
+        if (e.target.closest('.stv-info')) {
+            tooltip.classList.remove('stv-tooltip-visible');
         }
     });
 }
 
 export function init() {
     const buttonHtml = `
-        <div id="cr_recap" class="list-group-item flex-container flexGap5">
+        <div id="stv_recap" class="list-group-item flex-container flexGap5">
             <div class="fa-solid fa-image extensionsMenuExtensionButton"></div>
-            <span>Auto Wallpaper</span>
-            <span id="cr_recap_count" class="cr-count-badge"></span>
+            <span>Visualize</span>
+            <span id="stv_recap_count" class="cr-count-badge"></span>
         </div>
     `;
     $('#extensionsMenu').append(buttonHtml);
-    $('#cr_recap').on('click', () => updateWallpaper());
+    $('#stv_recap').on('click', () => updateWallpaper());
 
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'wallpaper',
@@ -984,5 +989,5 @@ export function init() {
     ctx.eventSource.on(ctx.eventTypes.MESSAGE_SENT, onMessageSent);
 
     renderSettingsPanel();
-    console.debug('[auto-wallpaper] extension initialized');
+    console.debug('[visualize] extension initialized');
 }
