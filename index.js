@@ -33,7 +33,8 @@ const defaultSettings = Object.freeze({
     textModel: 'inclusionai/ling-2.6-flash',
     inferenceProvider: 'novita', // OpenRouter inference provider tag ('' = OpenRouter default routing)
     remoteApiUrl: '', // R2 storage worker base URL ('' = store wallpapers locally in ST)
-    remoteApiKey: '', // R2 storage API key (X-API-Key)
+    sharePublic: true, // auto-share generated wallpapers to the public R2 library
+    contributorId: '', // random per-install id used for public uploads (auto-generated)
     wallpaperEnabled: true,
     messagesBetweenUpdates: 2,
     wallpaperCache: [],
@@ -77,6 +78,11 @@ function getSettings() {
     }
     delete extensionSettings[MODULE_NAME].imageSize; // legacy key, replaced by aspectRatio
     delete extensionSettings[MODULE_NAME].textProvider; // legacy transport selector (openrouter|st), replaced by textVendor
+    delete extensionSettings[MODULE_NAME].remoteApiKey; // legacy API-key auth, replaced by contributorId + public writes
+    // Auto-generate the per-install contributor id on first use of remote storage.
+    if (!extensionSettings[MODULE_NAME].contributorId) {
+        extensionSettings[MODULE_NAME].contributorId = `viz-${crypto.randomUUID().replaceAll('-', '')}`;
+    }
     return extensionSettings[MODULE_NAME];
 }
 
@@ -86,24 +92,34 @@ function getCache() {
 }
 
 // --- Remote storage (R2 worker) --------------------------------------------------
-// When remoteApiUrl + remoteApiKey are set, wallpapers are stored in the
-// r2-st-visualize bucket via the worker API: full WebP + thumbnail per wallpaper,
-// deduped by content hash, indexed in D1. Otherwise the old local ST background
-// storage is used. Cache entries carry { filename } locally or { url, thumb }
+// When remoteApiUrl is set, wallpapers are stored in the public r2-st-visualize
+// library via the worker: WebP full + thumbnail per wallpaper, deduped by content
+// hash, indexed in D1. Reads are public; uploads are tagged with a per-install
+// contributorId (no secret shipped) and rate-limited server-side. If the
+// sharePublic toggle is off, generated wallpapers stay local but the shared
+// library is still used for reading/reuse. Otherwise the old local ST background
+// storage is used. Cache entries carry { filename } locally or { url, thumb, id }
 // remotely.
 
 function isRemoteMode(settings) {
-    return !!(settings.remoteApiUrl && settings.remoteApiKey);
+    return !!(settings.remoteApiUrl);
 }
 
 async function remoteFetch(settings, path, options = {}) {
     const base = String(settings.remoteApiUrl).replace(/\/+$/, '');
-    const headers = { 'X-API-Key': settings.remoteApiKey, ...(options.headers || {}) };
-    const res = await fetch(`${base}${path}`, { ...options, headers });
+    const res = await fetch(`${base}${path}`, options);
     if (!res.ok) {
         throw new Error(`storage API ${res.status} ${res.statusText}`.trim());
     }
     return res;
+}
+
+/** Deletes one of this install's own uploads from the public library. */
+async function deleteRemoteWallpaper(settings, id) {
+    return remoteFetch(settings, `/api/wallpapers/${id}`, {
+        method: 'DELETE',
+        headers: { 'X-Contributor-Id': settings.contributorId },
+    });
 }
 
 /**
@@ -130,6 +146,7 @@ async function uploadRemote(settings, fullBlob, thumbBlob, setting) {
     form.append('description', setting.description);
     form.append('fit', settings.fitMode);
     form.append('aspect', settings.aspectRatio);
+    form.append('contributorId', settings.contributorId);
     const res = await remoteFetch(settings, '/api/wallpapers', { method: 'POST', body: form });
     return res.json();
 }
@@ -143,7 +160,15 @@ async function syncRemoteCache(settings) {
         const seen = new Set(cache.map(e => e.url));
         for (const w of data.wallpapers || []) {
             if (w?.urls?.full && !seen.has(w.urls.full)) {
-                cache.push({ name: w.name, description: w.description || '', filename: '', url: w.urls.full, thumb: w.urls.thumb });
+                cache.push({
+                    name: w.name,
+                    description: w.description || '',
+                    filename: '',
+                    id: w.id,
+                    own: w.contributorId === settings.contributorId,
+                    url: w.urls.full,
+                    thumb: w.urls.thumb,
+                });
             }
         }
         saveSettingsDebounced();
@@ -716,8 +741,9 @@ async function generateWallpaper(setting, settings) {
     const blob = dataURLToBlob(croppedDataUrl);
 
     // Remote storage (R2): re-encode as WebP (full + 256px thumbnail) and upload
-    // to the worker; the returned URLs are what the background/library use.
-    if (isRemoteMode(settings)) {
+    // to the shared public library (only if the user's sharePublic toggle is on);
+    // the returned URLs are what the background/library use.
+    if (isRemoteMode(settings) && settings.sharePublic) {
         const fullBlob = await encodeWebp(croppedDataUrl, 0);
         const thumbBlob = await encodeWebp(croppedDataUrl, 256);
         const record = await uploadRemote(settings, fullBlob, thumbBlob, setting);
@@ -725,6 +751,7 @@ async function generateWallpaper(setting, settings) {
             name: setting.name,
             description: setting.description,
             filename: '',
+            id: record.id,
             url: record.urls.full,
             thumb: record.urls.thumb,
         };
@@ -732,7 +759,8 @@ async function generateWallpaper(setting, settings) {
         return entry;
     }
 
-    // Local storage: upload to ST's backgrounds folder.
+    // Local storage: upload to ST's backgrounds folder (also used when remote
+    // mode is on but sharing is off — read the shared library, keep own images local).
     const filename = `visualize-${setting.name}.${extensionForMediaType(mediaType)}`;
 
     const formData = new FormData();
@@ -863,17 +891,38 @@ function setLoading(active, text) {
 /**
  * Renders the cached wallpaper library (thumbnails + tags) into the settings panel.
  * Remote wallpapers use their worker thumbnail URL; local ones use ST's thumbnail.
+ * Own remote uploads get a small delete affordance.
  */
 async function renderLibrary() {
     const cache = getCache();
+    const settings = getSettings();
     const items = cache.map(e => ({
         name: e.name,
         description: e.description || '',
         thumbnail: e.thumb || getThumbnailUrl('bg', e.filename),
+        deletable: !!(isRemoteMode(settings) && e.own && e.id),
+        id: e.id,
     }));
     const html = await renderExtensionTemplateAsync('third-party/SillyTavern-Visualize', 'library', { items });
     const container = $('#stv_library');
     if (container.length) container.html(html);
+    // Wire per-item delete for own remote uploads.
+    container.find('.visualize-delete').on('click', async function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const id = $(this).data('id');
+        if (!id) return;
+        try {
+            await deleteRemoteWallpaper(getSettings(), id);
+            const cache = getCache();
+            const idx = cache.findIndex(x => x.id === id);
+            if (idx !== -1) cache.splice(idx, 1);
+            saveSettingsDebounced();
+            renderLibrary();
+        } catch (err) {
+            console.warn('[visualize] delete failed', err?.message);
+        }
+    });
 }
 
 async function fillVendorSelect() {
@@ -959,7 +1008,7 @@ async function renderSettingsPanel() {
         textVendor: settings.textVendor,
         textModel: settings.textModel,
         remoteApiUrl: settings.remoteApiUrl,
-        remoteApiKey: settings.remoteApiKey,
+        sharePublic: settings.sharePublic,
         wallpaperEnabled: settings.wallpaperEnabled,
         messagesBetweenUpdates: settings.messagesBetweenUpdates,
         remainingTurns: Math.max(0, Math.max(1, settings.messagesBetweenUpdates) - messageCount),
@@ -997,7 +1046,7 @@ async function renderSettingsPanel() {
     });
     $('#stv_inference_provider').on('change', () => { getSettings().inferenceProvider = $('#stv_inference_provider').val(); saveSettingsDebounced(); });
     $('#stv_remote_url').on('input', () => { getSettings().remoteApiUrl = $('#stv_remote_url').val(); saveSettingsDebounced(); });
-    $('#stv_remote_key').on('input', () => { getSettings().remoteApiKey = $('#stv_remote_key').val(); saveSettingsDebounced(); });
+    $('#stv_share_public').on('change', () => { getSettings().sharePublic = $('#stv_share_public').is(':checked'); saveSettingsDebounced(); });
     $('#stv_wallpaper_enabled').on('change', () => { getSettings().wallpaperEnabled = $('#stv_wallpaper_enabled').is(':checked'); saveSettingsDebounced(); });
     $('#stv_messages_between').on('input', () => {
         const value = parseInt($('#stv_messages_between').val(), 10);

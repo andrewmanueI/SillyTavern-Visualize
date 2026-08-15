@@ -226,17 +226,17 @@
                     Storage
                     <span
                         class="stv-info"
-                        data-tooltip="Store wallpapers in Cloudflare R2 via the Visualize storage worker (D1 index + dedup). Leave empty to keep wallpapers in SillyTavern's local backgrounds folder."
+                        data-tooltip="Connect to the shared, crowd-sourced wallpaper library in Cloudflare R2 (public reads, per-install contributor id, rate-limited writes). Leave empty to keep wallpapers in SillyTavern's local backgrounds folder."
                         >ⓘ</span
                     >
                 </summary>
                 <div class="stv-section-content">
                     <div class="stv-block">
                         <label>
-                            Storage API URL
+                            Library URL
                             <span
                                 class="stv-info"
-                                data-tooltip="The workers.dev URL of the visualize-storage worker, e.g. https://visualize-storage.andrewmanuelcool.workers.dev"
+                                data-tooltip="The workers.dev URL of the visualize-storage worker, e.g. https://visualize-storage.andrewmanuelcool.workers.dev. When set, the extension reads the shared library for reuse."
                                 >ⓘ</span
                             >
                         </label>
@@ -249,22 +249,17 @@
                         />
                     </div>
                     <div class="stv-block">
-                        <label>
-                            Storage API key
-                            <span
-                                class="stv-info"
-                                data-tooltip="The X-API-Key for the storage worker. Set with `wrangler secret put API_KEY` and generated at deploy time."
-                                >ⓘ</span
-                            >
+                        <label class="checkbox_label">
+                            <input id="stv_share_public" type="checkbox" class="checkbox" {{#if sharePublic}}checked{{/if}} />
+                            <span>
+                                Share generated wallpapers to the public library
+                                <span
+                                    class="stv-info"
+                                    data-tooltip="When on (default), every wallpaper you generate is uploaded to the shared library so all users can reuse it — that's how the crowd-sourced pool grows. Scene names/descriptions become public. Off = still use the library, but your own wallpapers stay local."
+                                    >ⓘ</span
+                                >
+                            </span>
                         </label>
-                        <input
-                            id="stv_remote_key"
-                            class="text_pole"
-                            type="password"
-                            value="{{remoteApiKey}}"
-                            autocomplete="off"
-                            placeholder="viz-..."
-                        />
                     </div>
                 </div>
             </details>

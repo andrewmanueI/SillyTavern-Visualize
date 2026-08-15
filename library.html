@@ -3,6 +3,9 @@
 <div class="visualize-library-item" title="{{name}} — {{description}}">
     <img src="{{thumbnail}}" alt="{{name}}" loading="lazy" />
     <div class="visualize-library-name">{{name}}</div>
+    {{#if deletable}}
+    <button class="visualize-delete" data-id="{{id}}" title="Remove this wallpaper from the public library">✕</button>
+    {{/if}}
 </div>
 {{/each}}
 {{else}}
