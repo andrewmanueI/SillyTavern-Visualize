@@ -26,6 +26,10 @@ const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 // from this exact model (changing it invalidates stored embeddings).
 const EMBED_MODEL = 'baai/bge-base-en-v1.5';
 
+// The shared community library every install reads from and contributes to.
+// Baked in so users never have to see or configure the endpoint.
+const DEFAULT_REMOTE_URL = 'https://visualize-storage.andrewmanuelcool.workers.dev';
+
 const defaultSettings = Object.freeze({
     imageKey: '',
     imageModel: 'krea/krea-2-medium-turbo',
@@ -35,9 +39,9 @@ const defaultSettings = Object.freeze({
     textVendor: 'inclusionai',
     textModel: 'inclusionai/ling-2.6-flash',
     inferenceProvider: 'novita', // OpenRouter inference provider tag ('' = OpenRouter default routing)
-    remoteApiUrl: '', // R2 storage worker base URL ('' = store wallpapers locally in ST)
-    sharePublic: true, // auto-share generated wallpapers to the public R2 library
-    contributorId: '', // random per-install id used for public uploads (auto-generated)
+    remoteApiUrl: DEFAULT_REMOTE_URL, // shared community library endpoint (empty = offline/local)
+    sharePublic: true, // auto-share generated wallpapers to the community library
+    contributorId: '', // random per-install id used for library uploads (auto-generated)
     wallpaperEnabled: true,
     messagesBetweenUpdates: 2,
     wallpaperCache: [],
@@ -109,11 +113,11 @@ function getCache() {
     return Array.isArray(cache) ? cache : [];
 }
 
-// --- Remote storage (R2 worker) --------------------------------------------------
-// When remoteApiUrl is set, wallpapers are stored in the public r2-st-visualize
-// library via the worker: WebP full + thumbnail per wallpaper, deduped by content
-// hash, indexed in D1. Reads are public; uploads are tagged with a per-install
-// contributorId (no secret shipped) and rate-limited server-side. If the
+// --- Shared library storage -------------------------------------------------------
+// When remoteApiUrl is set, wallpapers are stored in the public community
+// library: WebP full + thumbnail per wallpaper, deduped by content
+// hash, indexed server-side. Reads are public; uploads are tagged with a per-install
+// contributorId (no secret shipped) and rate-limited. If the
 // sharePublic toggle is off, generated wallpapers stay local but the shared
 // library is still used for reading/reuse. Otherwise the old local ST background
 // storage is used. Cache entries carry { filename } locally or { url, thumb, id }
@@ -761,7 +765,7 @@ async function transitionTo(preloadSrc, url) {
 /**
  * Applies a wallpaper to the background with a crossfade. `entry` is a cache
  * entry: { filename } for local ST backgrounds, or { url, thumb } for wallpapers
- * served from the R2 storage worker.
+ * served from the shared library.
  */
 async function applyBackground(entry) {
     const settings = getSettings();
@@ -823,7 +827,7 @@ async function generateWallpaper(setting, settings) {
     }
     const blob = dataURLToBlob(croppedDataUrl);
 
-    // Remote storage (R2): re-encode as WebP (full + 256px thumbnail) and upload
+    // Shared library: re-encode as WebP (full + 256px thumbnail) and upload
     // to the shared public library (only if the user's sharePublic toggle is on);
     // the returned URLs are what the background/library use.
     if (isRemoteMode(settings) && settings.sharePublic) {
@@ -1109,7 +1113,6 @@ async function renderSettingsPanel() {
         fitMode: settings.fitMode,
         textVendor: settings.textVendor,
         textModel: settings.textModel,
-        remoteApiUrl: settings.remoteApiUrl,
         sharePublic: settings.sharePublic,
         wallpaperEnabled: settings.wallpaperEnabled,
         messagesBetweenUpdates: settings.messagesBetweenUpdates,
@@ -1147,7 +1150,6 @@ async function renderSettingsPanel() {
         fillInferenceProviderSelect($(this).val());
     });
     $('#stv_inference_provider').on('change', () => { getSettings().inferenceProvider = $('#stv_inference_provider').val(); saveSettingsDebounced(); });
-    $('#stv_remote_url').on('input', () => { getSettings().remoteApiUrl = $('#stv_remote_url').val(); saveSettingsDebounced(); });
     $('#stv_share_public').on('change', () => { getSettings().sharePublic = $('#stv_share_public').is(':checked'); saveSettingsDebounced(); });
     $('#stv_wallpaper_enabled').on('change', () => { getSettings().wallpaperEnabled = $('#stv_wallpaper_enabled').is(':checked'); saveSettingsDebounced(); });
     $('#stv_messages_between').on('input', () => {
@@ -1187,7 +1189,7 @@ async function renderSettingsPanel() {
         populate();
     });
 
-    // Pull any wallpapers stored in R2 (from any device) into the library cache.
+    // Pull wallpapers from the shared library (from any device) into the local cache.
     await syncRemoteCache(getSettings());
     await renderLibrary();
 }

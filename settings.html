@@ -219,43 +219,32 @@
                 </div>
             </details>
 
-            <!-- ══ STORAGE (R2) ══ -->
+            <!-- ══ SHARED LIBRARY ══ -->
             <details class="stv-section">
                 <summary>
                     <i class="fa-solid fa-chevron-right stv-section-chevron"></i>
-                    Storage
+                    Shared library
                     <span
                         class="stv-info"
-                        data-tooltip="Connect to the shared, crowd-sourced wallpaper library in Cloudflare R2 (public reads, per-install contributor id, rate-limited writes). Leave empty to keep wallpapers in SillyTavern's local backgrounds folder."
+                        data-tooltip="Connect to the community wallpaper library — public reads, per-install contributor id, rate-limited writes. Every user's generated scenes pool here so everyone reuses instead of regenerating."
                         >ⓘ</span
                     >
                 </summary>
                 <div class="stv-section-content">
                     <div class="stv-block">
-                        <label>
-                            Library URL
-                            <span
-                                class="stv-info"
-                                data-tooltip="The workers.dev URL of the visualize-storage worker, e.g. https://visualize-storage.andrewmanuelcool.workers.dev. When set, the extension reads the shared library for reuse."
-                                >ⓘ</span
-                            >
-                        </label>
-                        <input
-                            id="stv_remote_url"
-                            class="text_pole"
-                            type="text"
-                            value="{{remoteApiUrl}}"
-                            placeholder="https://visualize-storage.andrewmanuelcool.workers.dev"
-                        />
+                        <div class="stv-status-line">
+                            <i class="fa-solid fa-cloud"></i>
+                            <span>Connected to the shared community library</span>
+                        </div>
                     </div>
                     <div class="stv-block">
                         <label class="checkbox_label">
                             <input id="stv_share_public" type="checkbox" class="checkbox" {{#if sharePublic}}checked{{/if}} />
                             <span>
-                                Share generated wallpapers to the public library
+                                Share generated wallpapers to the library
                                 <span
                                     class="stv-info"
-                                    data-tooltip="When on (default), every wallpaper you generate is uploaded to the shared library so all users can reuse it — that's how the crowd-sourced pool grows. Scene names/descriptions become public. Off = still use the library, but your own wallpapers stay local."
+                                    data-tooltip="When on (default), every wallpaper you generate is uploaded to the shared library so all users can reuse it — that's how the pool grows. Scene names/descriptions become public. Off = still use the library, but your own wallpapers stay local."
                                     >ⓘ</span
                                 >
                             </span>
