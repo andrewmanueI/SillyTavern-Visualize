@@ -8,7 +8,7 @@ Every N completed assistant replies (default 2 — counting starts only after th
 2. If the model chose a cached wallpaper, it applies it directly (no image generation cost).
 3. Otherwise it generates a new wallpaper with an OpenRouter image model (default `krea/krea-2-medium-turbo`) and sets it as the SillyTavern background.
 
-Generated wallpapers are **portrait (9:16)**, scene-only (no people/characters/text), and shown with ST's `cover` background fit. Cached wallpapers appear as a scrollable thumbnail library in the settings panel.
+Generated wallpapers are **portrait (9:16)**, scene-only (no people/characters/text), and shown with ST's `cover` background fit. Cached wallpapers appear as a compact **tag list** in the settings panel — a **Local** tab for this device's cache and a **Global** tab for the whole shared library; click any tag to set it as the background.
 
 ## Installation
 

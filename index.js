@@ -15,7 +15,7 @@
 // doesn't advance the counter.
 
 import { getContext, renderExtensionTemplateAsync } from '../../../extensions.js';
-import { saveSettingsDebounced, getThumbnailUrl } from '../../../../script.js';
+import { saveSettingsDebounced } from '../../../../script.js';
 import { background_settings } from '../../../backgrounds.js';
 import { SlashCommand } from '../../../slash-commands/SlashCommand.js';
 import { SlashCommandParser } from '../../../slash-commands/SlashCommandParser.js';
@@ -45,6 +45,7 @@ const defaultSettings = Object.freeze({
     wallpaperEnabled: true,
     messagesBetweenUpdates: 2,
     wallpaperCache: [],
+    libraryView: 'local', // which library list the panel shows: 'local' cache or 'global' shared library
 });
 
 let messageCount = 0;
@@ -261,6 +262,29 @@ async function syncRemoteCache(settings) {
         saveSettingsDebounced();
     } catch (err) {
         console.warn('[visualize] remote cache sync failed', err?.message);
+    }
+}
+
+/**
+ * Live list of the whole shared library (cache-entry shaped, `own` flagged).
+ * Returns null on failure so the UI can distinguish "unreachable" from "empty".
+ */
+async function fetchGlobalLibrary(settings) {
+    if (!isRemoteMode(settings)) return null;
+    try {
+        const data = await (await remoteFetch(settings, '/api/wallpapers?limit=500')).json();
+        return (data.wallpapers || []).map(w => ({
+            name: w.name,
+            description: w.description || '',
+            filename: '',
+            id: w.id,
+            own: w.contributorId === settings.contributorId,
+            url: w.urls.full,
+            thumb: w.urls.thumb,
+        }));
+    } catch (err) {
+        console.warn('[visualize] global library fetch failed', err?.message);
+        return null;
     }
 }
 
@@ -995,24 +1019,73 @@ function setLoading(active, text) {
 }
 
 /**
- * Renders the cached wallpaper library (thumbnails + tags) into the settings panel.
- * Remote wallpapers use their worker thumbnail URL; local ones use ST's thumbnail.
- * Own remote uploads get a small delete affordance.
+ * Renders the wallpaper library into the settings panel as a compact list of
+ * tag chips (name only; description in the hover tooltip). Two views:
+ *   - Local: this device's cache (local ST backgrounds + synced remote ones).
+ *   - Global: the whole shared community library, fetched live from the worker.
+ * Clicking a chip applies that wallpaper to the background; global picks are
+ * also added to the local cache so the scene analyzer can reuse them. Own
+ * global uploads get a delete affordance.
  */
 async function renderLibrary() {
-    const cache = getCache();
     const settings = getSettings();
-    const items = cache.map(e => ({
+    const view = settings.libraryView === 'global' ? 'global' : 'local';
+    const container = $('#stv_library');
+    if (!container.length) return;
+
+    // Keep the Local/Global tabs in sync with the active view.
+    $('#stv_view_local, #stv_view_global').removeClass('active');
+    $(view === 'global' ? '#stv_view_global' : '#stv_view_local').addClass('active');
+
+    let items;
+    if (view === 'global') {
+        container.html('<small><i class="fa-solid fa-spinner fa-spin"></i> Loading global library…</small>');
+        const remote = await fetchGlobalLibrary(settings);
+        if (remote === null) {
+            container.html('<small>Could not reach the global library.</small>');
+            return;
+        }
+        items = remote;
+    } else {
+        items = getCache();
+    }
+
+    const templateItems = items.map(e => ({
         name: e.name,
         description: e.description || '',
-        thumbnail: e.thumb || getThumbnailUrl('bg', e.filename),
-        deletable: !!(isRemoteMode(settings) && e.own && e.id),
-        id: e.id,
+        filename: e.filename || '',
+        url: e.url || '',
+        thumb: e.thumb || '',
+        id: e.id || '',
+        deletable: !!(view === 'global' && e.own && e.id),
     }));
-    const html = await renderExtensionTemplateAsync('third-party/SillyTavern-Visualize', 'library', { items });
-    const container = $('#stv_library');
-    if (container.length) container.html(html);
-    // Wire per-item delete for own remote uploads.
+    const html = await renderExtensionTemplateAsync('third-party/SillyTavern-Visualize', 'library', { items: templateItems });
+    container.html(html);
+
+    // Click a tag → apply the wallpaper (and remember global picks locally).
+    container.find('.visualize-chip').on('click', async function (e) {
+        if ($(e.target).closest('.visualize-delete').length) return; // delete button handles itself
+        const entry = {
+            name: $(this).data('name'),
+            description: $(this).data('description') || '',
+            filename: $(this).data('filename') || '',
+            url: $(this).data('url') || '',
+            thumb: $(this).data('thumb') || '',
+            id: $(this).data('id') ? String($(this).data('id')) : '',
+        };
+        if (!entry.filename && !entry.url) return;
+        // Global picks join the local cache so the scene analyzer can reuse them.
+        if (entry.url) {
+            const cache = getCache();
+            if (!cache.some(c => (entry.id && c.id === entry.id) || (entry.url && c.url === entry.url))) {
+                cache.push({ ...entry, own: true });
+                saveSettingsDebounced();
+            }
+        }
+        await applyBackground(entry);
+    });
+
+    // Delete affordance for own public-library uploads.
     container.find('.visualize-delete').on('click', async function (e) {
         e.preventDefault();
         e.stopPropagation();
@@ -1021,7 +1094,7 @@ async function renderLibrary() {
         try {
             await deleteRemoteWallpaper(getSettings(), id);
             const cache = getCache();
-            const idx = cache.findIndex(x => x.id === id);
+            const idx = cache.findIndex(x => String(x.id) === String(id));
             if (idx !== -1) cache.splice(idx, 1);
             saveSettingsDebounced();
             renderLibrary();
@@ -1163,6 +1236,18 @@ async function renderSettingsPanel() {
     $('#stv_update_now').on('click', () => updateWallpaper());
     $('#stv_clear_cache').on('click', () => {
         getSettings().wallpaperCache = [];
+        saveSettingsDebounced();
+        renderLibrary();
+    });
+
+    // Local vs Global library view.
+    $('#stv_view_local').on('click', () => {
+        getSettings().libraryView = 'local';
+        saveSettingsDebounced();
+        renderLibrary();
+    });
+    $('#stv_view_global').on('click', () => {
+        getSettings().libraryView = 'global';
         saveSettingsDebounced();
         renderLibrary();
     });

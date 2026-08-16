@@ -1,32 +1,76 @@
+/* Wallpaper library: compact tag chips (name only), Local/Global tabs. */
 .visualize-library {
     max-height: 220px;
     overflow-y: auto;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
     gap: 6px;
     padding: 6px;
     border: 1px solid var(--SmartThemeBorderColor);
     border-radius: 5px;
     background-color: var(--black30a);
+    min-height: 44px;
 }
 
-.visualize-library-item {
-    position: relative;
+.visualize-library small {
+    opacity: 0.6;
+    padding: 4px 2px;
+}
+
+/* Local/Global view tabs. */
+.stv-library-tabs {
+    display: flex;
+    gap: 6px;
+}
+
+.stv-library-tabs .stv-library-tab {
+    flex: 1;
+    padding: 4px 6px;
+    font-size: 0.75em;
+    text-align: center;
+}
+
+.stv-library-tabs .stv-library-tab.active {
+    color: var(--SmartThemeQuoteColor, inherit);
+    border-color: var(--SmartThemeQuoteColor, var(--SmartThemeBorderColor));
+}
+
+/* A single wallpaper tag: the scene name only. */
+.visualize-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    padding: 3px 10px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 999px;
+    background: var(--black30a);
+    color: var(--SmartThemeBodyColor);
+    font-size: 0.75em;
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     cursor: pointer;
+    transition: border-color 0.12s ease, background-color 0.12s ease, color 0.12s ease;
 }
 
-/* Delete affordance for own public-library uploads. */
-.visualize-library-item .visualize-delete {
-    position: absolute;
-    top: 2px;
-    right: 2px;
-    width: 18px;
-    height: 18px;
-    line-height: 16px;
+.visualize-chip:hover {
+    border-color: var(--SmartThemeQuoteColor, #999);
+    color: var(--SmartThemeQuoteColor, inherit);
+}
+
+/* Delete affordance inside own global-library chips. */
+.visualize-chip .visualize-delete {
+    flex-shrink: 0;
+    width: 15px;
+    height: 15px;
+    line-height: 13px;
     padding: 0;
     border: none;
-    border-radius: 3px;
-    background: rgba(0, 0, 0, 0.65);
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.55);
     color: #ff9b9b;
     font-size: 0.7em;
     cursor: pointer;
@@ -34,30 +78,13 @@
     transition: opacity 0.15s ease;
 }
 
-.visualize-library-item:hover .visualize-delete {
+.visualize-chip:hover .visualize-delete {
     opacity: 1;
 }
 
-.visualize-library-item .visualize-delete:hover {
+.visualize-chip .visualize-delete:hover {
     background: rgba(160, 40, 40, 0.85);
     color: #fff;
-}
-
-.visualize-library-item img {
-    width: 100%;
-    height: 70px;
-    object-fit: cover;
-    border-radius: 4px;
-    display: block;
-}
-
-.visualize-library-name {
-    font-size: 0.75em;
-    text-align: center;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    padding: 2px 0;
 }
 
 /* Background crossfade layer: sits above #bg1 (same z-index, later in DOM order)

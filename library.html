@@ -1,12 +1,21 @@
 {{#if items}}
 {{#each items}}
-<div class="visualize-library-item" title="{{name}} — {{description}}">
-    <img src="{{thumbnail}}" alt="{{name}}" loading="lazy" />
-    <div class="visualize-library-name">{{name}}</div>
-    {{#if deletable}}
-    <button class="visualize-delete" data-id="{{id}}" title="Remove this wallpaper from the public library">✕</button>
-    {{/if}}
-</div>
+<span
+    class="visualize-chip"
+    title="{{description}}"
+    data-name="{{name}}"
+    data-description="{{description}}"
+    data-filename="{{filename}}"
+    data-url="{{url}}"
+    data-thumb="{{thumb}}"
+    data-id="{{id}}"
+    >{{name}}{{#if deletable}}<button
+        class="visualize-delete"
+        data-id="{{id}}"
+        title="Remove this wallpaper from the public library"
+        >✕</button
+    >{{/if}}</span
+>
 {{/each}}
 {{else}}
 <small>No cached wallpapers yet — chat to generate one.</small>
