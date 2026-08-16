@@ -306,6 +306,76 @@
     color: var(--SmartThemeBodyColor);
 }
 
+/* Push the percentage to the right edge of the status line. */
+#stv_settings .stv-status-spacer {
+    flex: 1;
+}
+
+#stv_settings .stv-turns-percent {
+    font-size: 0.8em;
+    opacity: 0.6;
+}
+
+/* Turns / step progress bars. */
+#stv_settings .stv-progress {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--black30a);
+    border: 1px solid rgba(128, 128, 128, 0.25);
+    overflow: hidden;
+    margin-top: 5px;
+}
+
+#stv_settings .stv-progress-fill {
+    height: 100%;
+    width: 0;
+    border-radius: 2px;
+    background: var(--SmartColor, #7b68ee);
+    transition: width 0.35s ease;
+}
+
+/* Indeterminate (busy) bar: a moving highlight. */
+#stv_settings .stv-progress-indeterminate .stv-progress-fill {
+    width: 35%;
+    animation: stv-progress-slide 1.1s ease-in-out infinite;
+}
+
+@keyframes stv-progress-slide {
+    0% { margin-left: -35%; }
+    100% { margin-left: 100%; }
+}
+
+/* Pipeline step pills (Analyze / Search / Generate / Apply). */
+#stv_settings .stv-steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+#stv_settings .stv-step {
+    padding: 2px 9px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 999px;
+    font-size: 0.68em;
+    opacity: 0.45;
+    transition: opacity 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+#stv_settings .stv-step.stv-step-active {
+    opacity: 1;
+    color: var(--SmartThemeQuoteColor, inherit);
+    border-color: var(--SmartThemeQuoteColor, var(--SmartThemeBorderColor));
+}
+
+#stv_settings .stv-step.stv-step-done {
+    opacity: 0.85;
+}
+
+#stv_settings .stv-step.stv-step-done::before {
+    content: '✓ ';
+}
+
 /* Model-catalog status inside the image block. */
 #stv_settings .stv-model-status {
     font-size: 0.8em;

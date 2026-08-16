@@ -831,6 +831,8 @@ async function generateWallpaper(setting, settings) {
             url: record.urls.full,
             thumb: record.urls.thumb,
         };
+        setLoading(true, 'Applying wallpaper…');
+        setStep('apply');
         await applyBackground(entry);
         return entry;
     }
@@ -855,6 +857,8 @@ async function generateWallpaper(setting, settings) {
     const savedName = (await uploadRes.text()).trim();
 
     const entry = { name: setting.name, description: setting.description, filename: savedName };
+    setLoading(true, 'Applying wallpaper…');
+    setStep('apply');
     await applyBackground(entry);
     return entry;
 }
@@ -880,6 +884,7 @@ async function updateWallpaper() {
 
     isUpdating = true;
     setLoading(true, 'Analyzing scene…');
+    setStep('analyze');
     try {
         let cache = getCache();
         // Remote mode: search the whole shared library semantically for the most
@@ -889,6 +894,8 @@ async function updateWallpaper() {
         if (isRemoteMode(settings)) {
             const queryText = recent.map(m => String(m.mes).trim()).filter(Boolean).join(' ');
             if (queryText) {
+                setLoading(true, 'Searching shared library…');
+                setStep('search');
                 const similar = await remoteSimilar(settings, queryText, 10);
                 if (similar.length) {
                     const merged = [];
@@ -901,12 +908,17 @@ async function updateWallpaper() {
                 }
             }
         }
+        setLoading(true, 'Analyzing scene…');
+        setStep('analyze');
         const decision = await decideWallpaper(recent, cache, settings);
         if (decision.mode === 'reuse') {
+            setLoading(true, 'Applying wallpaper…');
+            setStep('apply');
             await applyBackground(decision.entry);
             return;
         }
         setLoading(true, 'Generating wallpaper…');
+        setStep('generate');
         const result = await generateWallpaper(decision.setting, settings);
         if (!cache.some(e => e.name === result.name)) {
             cache.push(result);
@@ -943,24 +955,30 @@ function onMessageReceived(messageId, type) {
 /**
  * Reflects the current "turns until next auto-update" counter and the
  * visualize on/off state in the settings panel and the wand-menu badge.
+ * The progress bar fills as the counter advances toward the next update.
  */
 function updateStatusUI() {
     const settings = getSettings();
     const enabled = settings.wallpaperEnabled;
     const total = Math.max(1, settings.messagesBetweenUpdates);
     const remaining = Math.max(0, total - messageCount);
+    const progress = total > 0 ? Math.min(100, Math.round((messageCount / total) * 100)) : 0;
     const badge = $('#stv_recap_count');
     const turns = $('#stv_turns_left');
+    const fill = $('#stv_turns_fill');
+    const pct = $('#stv_turns_progress_label');
     if (badge.length) {
         badge.text(enabled ? String(remaining) : '');
         badge.toggleClass('cr-count-hidden', !enabled);
     }
     if (turns.length) turns.text(enabled ? String(remaining) : '—');
+    if (fill.length) fill.css('width', `${progress}%`);
+    if (pct.length) pct.text(enabled ? `${progress}%` : '');
 }
 
 /**
- * Shows/hides the in-panel loading indicator (spinner + stage text) and spins the
- * wand-menu icon while a wallpaper update is in progress.
+ * Shows/hides the in-panel busy indicator (current step + indeterminate bar)
+ * and spins the wand-menu icon while a wallpaper update is in progress.
  */
 function setLoading(active, text) {
     const spinner = $('#stv_status_loading');
@@ -979,8 +997,30 @@ function setLoading(active, text) {
         if (spinner.length) spinner.css('display', 'none');
         if (turnsRow.length) turnsRow.css('display', '');
         if (icon.length) icon.removeClass('fa-spin');
+        setStep(null);
         updateStatusUI();
     }
+}
+
+/**
+ * Highlights the current pipeline step in the busy indicator: earlier steps
+ * show as done, the current one as active, later ones as pending. Pass null
+ * (or nothing) to clear all step states.
+ */
+function setStep(current) {
+    const container = $('#stv_status_loading');
+    if (!container.length) return;
+    const steps = container.find('.stv-step');
+    if (!steps.length) return;
+    const order = ['analyze', 'search', 'generate', 'apply'];
+    steps.each(function () {
+        const key = $(this).data('step');
+        const idx = order.indexOf(key);
+        const curIdx = order.indexOf(current);
+        $(this)
+            .toggleClass('stv-step-done', current && idx >= 0 && curIdx >= 0 && idx < curIdx)
+            .toggleClass('stv-step-active', current && key === current);
+    });
 }
 
 /**
@@ -1294,7 +1334,7 @@ export function init() {
         name: 'wallpaper',
         callback: () => updateWallpaper(),
         returns: 'string',
-        helpString: 'Analyzes the current scene and sets a matching (cached, people-free) background wallpaper.',
+        helpString: 'Analyzes the current scene and sets a matching background wallpaper.',
     }));
 
     const ctx = getContext();

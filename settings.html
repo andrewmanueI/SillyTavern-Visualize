@@ -9,8 +9,7 @@
         <div class="inline-drawer-content">
             <div class="marginBot10">
                 <small>
-                    Automatically sets a matching (cached, people-free) background wallpaper as the
-                    scene changes.
+                    Automatically sets a matching background wallpaper as the scene changes.
                     <span
                         class="stv-info"
                         data-tooltip="Every N completed assistant replies, the extension sends the latest exchange to a text model which picks a cached wallpaper (reuse) or proposes a new people-free scene (generate). New wallpapers are produced by an OpenRouter image model and faded in."
@@ -19,14 +18,40 @@
                 </small>
             </div>
 
-            <!-- Status: always visible -->
+            <!-- Status: turns progress + live update steps -->
             <div id="stv_status" class="stv-block">
-                <div id="stv_status_loading" class="stv-status-line" style="display: none">
-                    <i class="fa-solid fa-spinner fa-spin"></i>
-                    <span id="stv_status_loading_text">Generating wallpaper…</span>
+                <!-- Idle: progress toward the next auto-update -->
+                <div id="stv_status_turns">
+                    <div class="stv-status-line">
+                        <span>Next update in <b id="stv_turns_left">{{remainingTurns}}</b> turn(s)</span>
+                        <span class="stv-status-spacer"></span>
+                        <span id="stv_turns_progress_label" class="stv-turns-percent">0%</span>
+                    </div>
+                    <div class="stv-progress"><div id="stv_turns_fill" class="stv-progress-fill"></div></div>
                 </div>
-                <div id="stv_status_turns" class="stv-status-line">
-                    <span>Turns until next update: <b id="stv_turns_left">{{remainingTurns}}</b></span>
+                <!-- Busy: current step + indeterminate bar -->
+                <div id="stv_status_loading" style="display: none">
+                    <div class="stv-status-line">
+                        <i class="fa-solid fa-spinner fa-spin"></i>
+                        <span id="stv_status_loading_text">Analyzing scene…</span>
+                    </div>
+                    <div class="stv-steps">
+                        <span class="stv-step" data-step="analyze">Analyze</span>
+                        <span class="stv-step" data-step="search">Search</span>
+                        <span class="stv-step" data-step="generate">Generate</span>
+                        <span class="stv-step" data-step="apply">Apply</span>
+                    </div>
+                    <div class="stv-progress stv-progress-indeterminate"><div class="stv-progress-fill"></div></div>
+                </div>
+            </div>
+
+            <!-- ══ ACTIONS ══ -->
+            <div class="stv-block stv-btn-row">
+                <div id="stv_update_now" class="menu_button" title="Analyze the current scene and update the wallpaper now.">
+                    <span>Update now</span>
+                </div>
+                <div id="stv_clear_cache" class="menu_button" title="Remove cached wallpapers so new scenes regenerate.">
+                    <span>Clear cache</span>
                 </div>
             </div>
 
@@ -252,16 +277,6 @@
                     </div>
                 </div>
             </details>
-
-            <!-- ══ ACTIONS ══ -->
-            <div class="stv-block stv-btn-row">
-                <div id="stv_update_now" class="menu_button" title="Analyze the current scene and update the wallpaper now.">
-                    <span>Update now</span>
-                </div>
-                <div id="stv_clear_cache" class="menu_button" title="Remove cached wallpapers so new scenes regenerate.">
-                    <span>Clear cache</span>
-                </div>
-            </div>
 
             <!-- ══ WALLPAPER LIBRARY ══ -->
             <p class="stv-section-title">Wallpaper library</p>
