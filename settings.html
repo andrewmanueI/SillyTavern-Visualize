@@ -55,14 +55,14 @@
                 </div>
             </div>
 
-            <!-- ══ GENERAL ══ -->
+            <!-- ══ AUTOMATION ══ -->
             <details class="stv-section">
                 <summary>
                     <i class="fa-solid fa-chevron-right stv-section-chevron"></i>
-                    General
+                    Automation
                     <span
                         class="stv-info"
-                        data-tooltip="Whether the extension runs automatically and how often it triggers."
+                        data-tooltip="When and how often the wallpaper is updated automatically."
                         >ⓘ</span
                     >
                 </summary>
@@ -70,17 +70,18 @@
                     <div class="stv-block">
                         <label class="checkbox_label">
                             <input id="stv_wallpaper_enabled" type="checkbox" class="checkbox" {{#if wallpaperEnabled}}checked{{/if}} />
-                            <span>Auto-wallpaper</span>
+                            <span>Automatic wallpaper updates</span>
                         </label>
                     </div>
 
                     <div class="stv-block">
                         <label>
-                            Assistant replies between updates:
+                            Update every
                             <b><span id="stv_messages_between_value">{{messagesBetweenUpdates}}</span></b>
+                            assistant repl<span>ies</span>
                             <span
                                 class="stv-info"
-                                data-tooltip="How many completed assistant replies pass before the wallpaper is re-analyzed. 1 = every exchange, 4 = every two exchanges. Only counts after the assistant finishes a reply."
+                                data-tooltip="How many completed assistant replies pass before the scene is re-analyzed and the wallpaper updated. 1 = every exchange, 4 = every two exchanges. Only counts after the assistant finishes a reply."
                                 >ⓘ</span
                             >
                         </label>
@@ -96,14 +97,14 @@
                 </div>
             </details>
 
-            <!-- ══ IMAGE GENERATION ══ -->
+            <!-- ══ WALLPAPER GENERATION ══ -->
             <details class="stv-section">
                 <summary>
                     <i class="fa-solid fa-chevron-right stv-section-chevron"></i>
-                    Image generation
+                    Wallpaper generation
                     <span
                         class="stv-info"
-                        data-tooltip="Settings for the OpenRouter image model that paints the wallpapers."
+                        data-tooltip="The model and API key used to paint new wallpapers when no cached scene matches."
                         >ⓘ</span
                     >
                 </summary>
@@ -113,7 +114,7 @@
                             OpenRouter API key
                             <span
                                 class="stv-info"
-                                data-tooltip="Required. Used for both image generation and the text-model call. Stored only in SillyTavern's settings — never in this repository."
+                                data-tooltip="Required. Used for both wallpaper generation and the scene-analysis call. Stored only in SillyTavern's settings — never in this repository."
                                 >ⓘ</span
                             >
                         </label>
@@ -129,7 +130,7 @@
 
                     <div class="stv-block">
                         <label>
-                            Image model
+                            Wallpaper model
                             <span
                                 class="stv-info"
                                 data-tooltip="Image-generation models served by OpenRouter, ordered by price low → high."
@@ -160,10 +161,10 @@
                 <div class="stv-section-content">
                     <div class="stv-block">
                         <label>
-                            Text model provider
+                            Analyzer provider
                             <span
                                 class="stv-info"
-                                data-tooltip="The OpenRouter vendor that hosts the text model (e.g. google, deepseek, openai)."
+                                data-tooltip="The OpenRouter vendor that hosts the scene-analysis model (e.g. google, deepseek, openai)."
                                 >ⓘ</span
                             >
                         </label>
@@ -174,7 +175,7 @@
 
                     <div class="stv-block">
                         <label>
-                            Text model
+                            Analyzer model
                             <span
                                 class="stv-info"
                                 data-tooltip="All models from the selected provider. Small MoE models work but may need the built-in retry loop on flaky responses."
@@ -188,7 +189,7 @@
 
                     <div class="stv-block">
                         <label>
-                            Inference provider
+                            Analyzer endpoint
                             <span
                                 class="stv-info"
                                 data-tooltip="Which OpenRouter inference provider (endpoint) serves the scene-analysis model. Only providers actually available for the selected model are listed — they come straight from OpenRouter's per-model endpoints. 'Auto' lets OpenRouter load-balance by default."
@@ -224,7 +225,7 @@
                         <label class="checkbox_label">
                             <input id="stv_share_public" type="checkbox" class="checkbox" {{#if sharePublic}}checked{{/if}} />
                             <span>
-                                Share generated wallpapers to the library
+                                Share wallpapers to the community library
                                 <span
                                     class="stv-info"
                                     data-tooltip="When on (default), every wallpaper you generate is uploaded to the shared library so all users can reuse it — that's how the pool grows. Scene names/descriptions become public. Off = still use the library, but your own wallpapers stay local."
@@ -234,7 +235,7 @@
                         </label>
                     </div>
 
-                    <p class="stv-section-title">Wallpaper library</p>
+                    <p class="stv-section-title">Available wallpapers</p>
                     <div class="stv-library-tabs marginTop5">
                         <div
                             id="stv_view_local"
