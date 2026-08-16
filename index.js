@@ -1186,9 +1186,6 @@ async function renderSettingsPanel() {
     const html = await renderExtensionTemplateAsync('third-party/SillyTavern-Visualize', 'settings', {
         imageKey: settings.imageKey,
         imageModel: settings.imageModel,
-        aspectRatio: settings.aspectRatio,
-        cropRatio: settings.cropRatio,
-        fitMode: settings.fitMode,
         textVendor: settings.textVendor,
         textModel: settings.textModel,
         sharePublic: settings.sharePublic,
@@ -1198,15 +1195,10 @@ async function renderSettingsPanel() {
     });
     $('#extensions_settings2').append(html);
 
-    // Restore select values that the template can't preselect (fit mode).
-    $('#stv_fit_mode').val(getSettings().fitMode);
     updateStatusUI();
     initTooltips();
 
     $('#stv_image_key').on('input', () => { getSettings().imageKey = $('#stv_image_key').val(); saveSettingsDebounced(); });
-    $('#stv_aspect_ratio').on('input', () => { getSettings().aspectRatio = $('#stv_aspect_ratio').val(); saveSettingsDebounced(); });
-    $('#stv_crop_ratio').on('input', () => { getSettings().cropRatio = $('#stv_crop_ratio').val(); saveSettingsDebounced(); });
-    $('#stv_fit_mode').on('change', () => { getSettings().fitMode = $('#stv_fit_mode').val(); saveSettingsDebounced(); });
     $('#stv_image_model').on('change', () => { getSettings().imageModel = $('#stv_image_model').val(); saveSettingsDebounced(); });
     $('#stv_text_provider').on('change', async function () {
         const vendor = $(this).val();
