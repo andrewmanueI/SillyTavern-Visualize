@@ -244,14 +244,14 @@
                 </div>
             </details>
 
-            <!-- ══ SHARED LIBRARY ══ -->
+            <!-- ══ LIBRARIES (shared + wallpaper library) ══ -->
             <details class="stv-section">
                 <summary>
                     <i class="fa-solid fa-chevron-right stv-section-chevron"></i>
-                    Shared library
+                    Libraries
                     <span
                         class="stv-info"
-                        data-tooltip="Connect to the community wallpaper library — public reads, per-install contributor id, rate-limited writes. Every user's generated scenes pool here so everyone reuses instead of regenerating."
+                        data-tooltip="The shared community library (public reads, per-install contributor id, rate-limited writes) and your local cache. Every user's generated scenes pool in the shared library so everyone reuses instead of regenerating."
                         >ⓘ</span
                     >
                 </summary>
@@ -275,26 +275,25 @@
                             </span>
                         </label>
                     </div>
+
+                    <p class="stv-section-title">Wallpaper library</p>
+                    <div class="stv-library-tabs marginTop5">
+                        <div
+                            id="stv_view_local"
+                            class="menu_button stv-library-tab"
+                            title="Wallpapers cached on this device — click a tag to set it as the background."
+                            >Local</div
+                        >
+                        <div
+                            id="stv_view_global"
+                            class="menu_button stv-library-tab"
+                            title="The shared community library — every wallpaper contributed by all installs. Click a tag to set it as the background."
+                            >Global</div
+                        >
+                    </div>
+                    <div id="stv_library" class="visualize-library marginTop5"></div>
                 </div>
             </details>
-
-            <!-- ══ WALLPAPER LIBRARY ══ -->
-            <p class="stv-section-title">Wallpaper library</p>
-            <div class="stv-library-tabs marginTop5">
-                <div
-                    id="stv_view_local"
-                    class="menu_button stv-library-tab"
-                    title="Wallpapers cached on this device — click a tag to set it as the background."
-                    >Local</div
-                >
-                <div
-                    id="stv_view_global"
-                    class="menu_button stv-library-tab"
-                    title="The shared community library — every wallpaper contributed by all installs. Click a tag to set it as the background."
-                    >Global</div
-                >
-            </div>
-            <div id="stv_library" class="visualize-library marginTop5"></div>
         </div>
     </div>
 </div>
