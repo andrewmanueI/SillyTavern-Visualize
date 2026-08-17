@@ -458,12 +458,13 @@ function buildDecideMessages(messages, cache) {
         '<output_format>',
         'Respond with JSON only, using exactly one of these two shapes:',
         '1) {"action":"reuse","name":"<exact name from <cached_wallpapers>, verbatim>"}',
-        '2) {"action":"generate","name":"<short kebab-case slug, 2-4 words>","description":"<1-2 sentences: location, time, weather, lighting, era, objects>"}',
+        '2) {"action":"generate","name":"<short kebab-case slug, 2-4 words>","description":"<2-4 sentences of concrete visual detail mined from the conversation: exact location/room, materials and colors of walls/floors/fixtures, furniture and objects, lighting, time of day/weather, era/style>"}',
         '</output_format>',
         '',
         '<rules>',
         '- Only reuse when a cached wallpaper matches the scene well; otherwise generate.',
         '- For generate, describe ONLY the physical setting: never mention people, characters, names, pronouns, creatures, or actions.',
+        '- For generate, mine the conversation for the concrete visual facts of the scene (for example: the kitchen of a mansion with deep red walls, a shower with matte black tiles, a study lit by a green banker\'s lamp) and put THOSE details in the description — never fall back to generic phrases when the text establishes specific details.',
         '- For generate, write the description as a photorealistic photography prompt: state the medium explicitly (e.g. "cinematic photograph", "photorealistic still") and use concrete, named lighting and material terms (e.g. "golden hour side lighting", "wet black stone", "volumetric fog", "harsh fluorescent overhead") instead of vague adjectives like "beautiful" or "premium."',
         '- Never invent or modify a cached name — copy it verbatim from <cached_wallpapers>.',
         '- Output raw JSON, no markdown fences, no commentary.',
@@ -562,7 +563,7 @@ async function decideWallpaper(messages, cache, settings) {
 
         let raw = '';
         try {
-            raw = await chatCompletion(requestMessages, settings, 220);
+            raw = await chatCompletion(requestMessages, settings, 300);
         } catch (err) {
             // chatCompletion already retried transient failures; retry the whole
             // attempt while we have attempts left, otherwise propagate.
@@ -622,9 +623,10 @@ async function decideWallpaper(messages, cache, settings) {
 function buildImagePrompt(settingDescription) {
     return [
         'A cinematic background wallpaper, tall portrait orientation.',
-        'Absolutely NO people, NO humans, NO characters, NO figures, NO faces, NO hands, NO silhouettes, NO animals, NO creatures, NO text, NO watermark, NO logo.',
-        'An empty, unoccupied scene. Depict ONLY the environment, atmosphere, lighting, and mood.',
-        'Setting: ' + (settingDescription || '').trim(),
+        'Absolutely NO people, NO humans, NO characters, NO figures, NO faces, NO hands, NO silhouettes, NO animals, NO creatures.',
+        'An empty, unoccupied scene. Depict ONLY the environment, atmosphere, lighting, materials, and mood.',
+        'Render the setting below faithfully, preserving its concrete visual details:',
+        (settingDescription || '').trim(),
     ].join(' ');
 }
 
