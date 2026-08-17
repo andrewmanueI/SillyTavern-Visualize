@@ -96,6 +96,13 @@ function getSettings() {
             extensionSettings[MODULE_NAME][key] = defaultSettings[key];
         }
     }
+    // Older builds exposed remoteApiUrl as an editable field that defaulted to
+    // '' (and the migration copies that legacy value verbatim). Treat any
+    // empty/whitespace value as 'unset' so migrated installs rejoin the shared
+    // library instead of silently running in offline mode.
+    if (!String(extensionSettings[MODULE_NAME].remoteApiUrl ?? '').trim()) {
+        extensionSettings[MODULE_NAME].remoteApiUrl = DEFAULT_REMOTE_URL;
+    }
     delete extensionSettings[MODULE_NAME].imageSize; // legacy key, replaced by aspectRatio
     delete extensionSettings[MODULE_NAME].textProvider; // legacy transport selector (openrouter|st), replaced by textVendor
     delete extensionSettings[MODULE_NAME].remoteApiKey; // legacy API-key auth, replaced by contributorId + public writes
@@ -1192,6 +1199,7 @@ async function renderSettingsPanel() {
         wallpaperEnabled: settings.wallpaperEnabled,
         messagesBetweenUpdates: settings.messagesBetweenUpdates,
         remainingTurns: Math.max(0, Math.max(1, settings.messagesBetweenUpdates) - messageCount),
+        remoteMode: isRemoteMode(settings),
     });
     $('#extensions_settings2').append(html);
 

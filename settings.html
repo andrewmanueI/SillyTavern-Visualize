@@ -217,8 +217,13 @@
                 <div class="stv-section-content">
                     <div class="stv-block">
                         <div class="stv-status-line">
-                            <i class="fa-solid fa-cloud"></i>
-                            <span>Connected to the shared community library</span>
+                            {{#if remoteMode}}
+                                <i class="fa-solid fa-cloud"></i>
+                                <span>Connected to the shared community library</span>
+                            {{else}}
+                                <i class="fa-solid fa-cloud-slash"></i>
+                                <span class="failure">Not connected — local mode only</span>
+                            {{/if}}
                         </div>
                     </div>
                     <div class="stv-block">
