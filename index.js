@@ -43,6 +43,7 @@ const defaultSettings = Object.freeze({
     messagesBetweenUpdates: 2,
     wallpaperCache: [],
     libraryView: 'local', // which library list the panel shows: 'local' cache or 'global' shared library
+    lastChangeMesId: 0, // scene checkpoint: id of the newest message when the wallpaper last changed (0 = none yet)
 });
 
 let messageCount = 0;
@@ -50,6 +51,11 @@ let isUpdating = false;
 
 const FADE_LAYER_ID = 'stv_bg_fade';
 const FADE_MS = 700;
+
+// Scene-window budget: when a checkpoint exists, the analyzer reviews the ENTIRE
+// conversation since that change, trimming OLDEST messages first should it exceed
+// this many characters (guards context size / cost on very long chats).
+const SCENE_WINDOW_MAX_CHARS = 30000;
 
 // Retry policy for the text-model call. Small MoE models (e.g. ling-2.6-flash)
 // intermittently return upstream 5xx errors, empty completions, or non-JSON text,
@@ -781,6 +787,13 @@ async function applyBackground(entry) {
     background_settings.name = entry?.url ? `visualize:${entry.name}` : entry.filename;
     background_settings.url = url;
     await transitionTo(preloadSrc, url);
+    // Scene checkpoint: always review from the message at which the wallpaper
+    // changed (covers generate, reuse, and manual library picks).
+    const ctx = getContext();
+    const lastMes = (ctx.chat || []).filter(m => m && m.mes && !m.is_system).slice(-1)[0];
+    if (lastMes && typeof lastMes.id === 'number') {
+        settings.lastChangeMesId = lastMes.id;
+    }
     saveSettingsDebounced();
 }
 
@@ -871,6 +884,38 @@ async function generateWallpaper(setting, settings) {
 }
 
 /**
+ * Builds the conversation window sent to the scene analyzer.
+ * A checkpoint is recorded whenever a wallpaper is set (generated, reused, or
+ * picked from the library): from then on the ENTIRE conversation since that
+ * message is included, so the model never has to guess a scene from a single
+ * info-free exchange. Without a checkpoint (never changed, or chat switch) it
+ * falls back to the last N messages. The char budget drops OLDEST messages
+ * first on very long chats.
+ */
+function getSceneWindow(messages, settings) {
+    const checkpoint = Number(settings.lastChangeMesId) || 0;
+    let window;
+    if (checkpoint) {
+        const idx = messages.findIndex(m => m.id === checkpoint);
+        if (idx >= 0) {
+            window = messages.slice(idx);
+        }
+    }
+    if (!window) {
+        window = messages.slice(-Math.max(2, settings.messagesBetweenUpdates));
+    }
+    let total = 0;
+    let start = window.length - 1;
+    for (let i = window.length - 1; i >= 0; i--) {
+        const len = String(window[i].mes || '').length;
+        if (i < window.length - 1 && total + len > SCENE_WINDOW_MAX_CHARS) break;
+        total += len;
+        start = i;
+    }
+    return window.slice(start);
+}
+
+/**
  * Analyzes the latest chat exchange and sets a matching wallpaper
  * (reusing a cached one when possible).
  */
@@ -887,7 +932,7 @@ async function updateWallpaper() {
     const messages = (ctx.chat || []).filter(m => m && m.mes && !m.is_system);
     if (!messages.length) return;
 
-    const recent = messages.slice(-Math.max(2, settings.messagesBetweenUpdates));
+    const window = getSceneWindow(messages, settings);
 
     isUpdating = true;
     setLoading(true, 'Analyzing scene…');
@@ -899,7 +944,7 @@ async function updateWallpaper() {
         // is far bigger than the local cache, so this is how crowd-sourcing pays
         // off — most scenes resolve to an existing wallpaper, no generation).
         if (isRemoteMode(settings)) {
-            const queryText = recent.map(m => String(m.mes).trim()).filter(Boolean).join(' ');
+            const queryText = window.map(m => String(m.mes).trim()).filter(Boolean).join(' ');
             if (queryText) {
                 setLoading(true, 'Searching shared library…');
                 setStep('search');
@@ -917,7 +962,7 @@ async function updateWallpaper() {
         }
         setLoading(true, 'Analyzing scene…');
         setStep('analyze');
-        const decision = await decideWallpaper(recent, cache, settings);
+        const decision = await decideWallpaper(window, cache, settings);
         if (decision.mode === 'reuse') {
             setLoading(true, 'Applying wallpaper…');
             setStep('apply');
