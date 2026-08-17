@@ -462,8 +462,8 @@ function buildDecideMessages(messages, cache) {
         '</output_format>',
         '',
         '<rules>',
-        '- Only reuse when a cached wallpaper matches the scene well; otherwise generate.',
-        '- For generate, describe ONLY the physical setting: never mention people, characters, names, pronouns, creatures, or actions.',
+        '- Reuse only when a cached wallpaper accurately represents the scene\'s concrete details (location, materials, colors, lighting); if any established detail differs, do NOT reuse — generate a fresh wallpaper that captures the scene exactly.',
+        '- For generate, describe ONLY the physical setting: never mention people, characters, names, pronouns, creatures, or actions, and never include readable text, signs, or signage.',
         '- For generate, mine the conversation for the concrete visual facts of the scene (for example: the kitchen of a mansion with deep red walls, a shower with matte black tiles, a study lit by a green banker\'s lamp) and put THOSE details in the description — never fall back to generic phrases when the text establishes specific details.',
         '- For generate, write the description as a photorealistic photography prompt: state the medium explicitly (e.g. "cinematic photograph", "photorealistic still") and use concrete, named lighting and material terms (e.g. "golden hour side lighting", "wet black stone", "volumetric fog", "harsh fluorescent overhead") instead of vague adjectives like "beautiful" or "premium."',
         '- Never invent or modify a cached name — copy it verbatim from <cached_wallpapers>.',
@@ -623,7 +623,7 @@ async function decideWallpaper(messages, cache, settings) {
 function buildImagePrompt(settingDescription) {
     return [
         'A cinematic background wallpaper, tall portrait orientation.',
-        'Absolutely NO people, NO humans, NO characters, NO figures, NO faces, NO hands, NO silhouettes, NO animals, NO creatures.',
+        'Absolutely NO people, NO humans, NO characters, NO figures, NO faces, NO hands, NO silhouettes, NO animals, NO creatures, NO readable text, NO signs, NO signage.',
         'An empty, unoccupied scene. Depict ONLY the environment, atmosphere, lighting, materials, and mood.',
         'Render the setting below faithfully, preserving its concrete visual details:',
         (settingDescription || '').trim(),
